@@ -13,23 +13,37 @@ namespace Yarp
             if (!(message is SetTimer setMessage))
                 return Task.FromCanceled(context.Token);
 
-            var timer = new Timer(OnTimerCallback, context, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            var timer = new Timer(OnTimerCallback,
+                new TimerState(setMessage.TimerId, message,
+                    context.SendMessage, DateTime.UtcNow, setMessage.DueTime, setMessage.Period),
+                Timeout.InfiniteTimeSpan,
+                Timeout.InfiniteTimeSpan);
+
             timer.Change(setMessage.DueTime, setMessage.Period);
-            
+
             return Task.FromResult(0);
         }
 
         private void OnTimerCallback(object state)
         {
-            if (!(state is IContext ctx))
+            if (!(state is TimerState timerState))
                 return;
 
-            var message = ctx.Message;
+            var message = timerState.Message;
             if (!(message is SetTimer setTimerMessage))
                 return;
 
             var timerId = setTimerMessage.TimerId;
-            ctx.SendMessage(new TimerExpired(timerId));
+
+            var currentTime = DateTime.UtcNow;
+            var expirationTime = timerState.StartTimeUtc + timerState.DueTime;
+            if (timerState.Period == Timeout.InfiniteTimeSpan && currentTime > expirationTime)
+            {
+                timerState.SendMessage(new TimerExpired(timerId));
+                return;
+            }
+
+            timerState.SendMessage(new TimerTick(timerId, currentTime));
         }
     }
 }

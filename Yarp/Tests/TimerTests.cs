@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
@@ -10,35 +11,86 @@ using Yarp.Messages;
 
 namespace Tests
 {
-    public class TimerTests
+    public class TimerTests : IDisposable
     {
+        private TimerActor _timerActor;
+        private Guid _timerId;
+        private ConcurrentBag<object> _elapsedEvents;
+        private CancellationTokenSource _cancellationTokenSource;
+
+        public TimerTests()
+        {
+            _timerActor = new TimerActor();
+            _timerId = Guid.NewGuid();
+            _elapsedEvents = new ConcurrentBag<object>();
+            _cancellationTokenSource = new CancellationTokenSource();
+        }
+
+        public void Dispose()
+        {
+            _timerActor = null;
+            _timerId = Guid.Empty;
+
+            _elapsedEvents?.Clear();
+            _elapsedEvents = null;
+
+            _cancellationTokenSource = null;
+        }
+
+        [Fact]
+        public void ShouldSendTimerTickMessageWhenAPeriodicIntervalIsSpecified()
+        {
+            Func<TimerTick, bool> filter = msg =>
+                msg.TimerId == _timerId;
+
+            var delay = TimeSpan.FromMilliseconds(0);
+            var interval = TimeSpan.FromMilliseconds(5);
+
+            var sendMessage = _timerActor.CreateSender(_cancellationTokenSource.Token)
+                .WithMessageHandler(CreateCollector(filter));
+
+            sendMessage(new SetTimer(_timerId, delay, interval));
+
+            // Sleep to avoid a race condition
+            Thread.Sleep(1000);
+
+            // There should be at least a couple of events that have fired            
+            Assert.True(_elapsedEvents.Count(e => e is TimerTick) > 1);
+        }
+
         [Fact]
         public void ShouldSendTimerExpiredMessageWhenTimeHasElapsed()
         {
-            var timer = new TimerActor();
-            var timerId = Guid.NewGuid();
+            // Arrange
+            Func<TimerExpired, bool> hasTimeExpired = msg =>
+                msg.TimerId == _timerId;
 
-            var elapsedEvents = new ConcurrentBag<TimerExpired>();
-            Action<object> handler = msg =>
-            {
-                var timerExpired = msg as TimerExpired;
-                if (timerExpired == null)
-                    return;
+            // Act
+            var delay = TimeSpan.FromMilliseconds(100);
+            var interval = Timeout.InfiniteTimeSpan;
 
-                if (timerExpired.TimerId == timerId)
-                {
-                    elapsedEvents.Add(timerExpired);
-                }
-            };
+            var sendMessage = _timerActor.CreateSender(_cancellationTokenSource.Token)
+                .WithMessageHandler(CreateCollector(hasTimeExpired));
 
-            var source = new CancellationTokenSource();
-            var context = new Context(new SetTimer(timerId, TimeSpan.FromMilliseconds(100), Timeout.InfiniteTimeSpan), handler, source.Token);
-            var task = timer.TellAsync(context);
-
-            Task.WaitAll(new[] {task});
+            sendMessage(new SetTimer(_timerId, delay, interval));
 
             Thread.Sleep(1000);
-            Assert.Equal(elapsedEvents.Count, 1);
+
+            // Assert
+            Assert.Equal(_elapsedEvents.Count, 1);
+        }
+
+        private Action<object> CreateCollector<TMessage>(Func<TMessage, bool> filter)
+            where TMessage : class
+        {
+            return msg =>
+            {
+                if (!(msg is TMessage timerMessage))
+                    return;
+
+                if (filter(timerMessage))
+                    _elapsedEvents.Add(timerMessage);
+            };
         }
     }
 }
