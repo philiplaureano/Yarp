@@ -1,11 +1,12 @@
 ﻿using System;
+using System.Threading;
 
 namespace Yarp
 {
     internal struct TimerState
     {
         public TimerState(Guid timerId, object message, Action<object> sendMessage, 
-            DateTime startTimeUtc, TimeSpan dueTime, TimeSpan period)
+            DateTime startTimeUtc, TimeSpan dueTime, TimeSpan period, CancellationToken cancellationToken)
         {
             TimerId = timerId;
             Message = message;
@@ -13,6 +14,7 @@ namespace Yarp
             StartTimeUtc = startTimeUtc;
             DueTime = dueTime;
             Period = period;
+            CancellationToken = cancellationToken;
         }
 
         public Guid TimerId { get; }
@@ -21,5 +23,6 @@ namespace Yarp
         public DateTime StartTimeUtc { get; }
         public TimeSpan DueTime { get; }
         public TimeSpan Period { get; }
+        public CancellationToken CancellationToken { get; }
     }
 }

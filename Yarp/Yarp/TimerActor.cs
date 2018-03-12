@@ -15,7 +15,7 @@ namespace Yarp
 
             var timer = new Timer(OnTimerCallback,
                 new TimerState(setMessage.TimerId, message,
-                    context.SendMessage, DateTime.UtcNow, setMessage.DueTime, setMessage.Period),
+                    context.SendMessage, DateTime.UtcNow, setMessage.DueTime, setMessage.Period, context.Token),
                 Timeout.InfiniteTimeSpan,
                 Timeout.InfiniteTimeSpan);
 
@@ -29,6 +29,9 @@ namespace Yarp
             if (!(state is TimerState timerState))
                 return;
 
+            if (timerState.CancellationToken.IsCancellationRequested)
+                return;
+            
             var message = timerState.Message;
             if (!(message is SetTimer setTimerMessage))
                 return;

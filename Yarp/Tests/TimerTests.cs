@@ -38,6 +38,28 @@ namespace Tests
         }
 
         [Fact]
+        public void ShouldSendNoMessagesIfCancellationIsRequested()
+        {
+            _cancellationTokenSource.Cancel();
+            
+            Func<TimerTick, bool> filter = msg =>
+                msg.TimerId == _timerId;
+
+            var delay = TimeSpan.FromMilliseconds(0);
+            var interval = TimeSpan.FromMilliseconds(5);
+
+            var sendMessage = _timerActor.CreateSender(_cancellationTokenSource.Token)
+                .WithMessageHandler(CreateCollector(filter));
+
+            sendMessage(new SetTimer(_timerId, delay, interval));
+
+            // Sleep to avoid a race condition
+            Thread.Sleep(1000);
+
+            // There should be zero events that have fired            
+            Assert.Empty(_elapsedEvents);
+        }
+        [Fact]
         public void ShouldSendTimerTickMessageWhenAPeriodicIntervalIsSpecified()
         {
             Func<TimerTick, bool> filter = msg =>
