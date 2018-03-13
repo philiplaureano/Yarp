@@ -45,13 +45,14 @@ namespace Tests
 
             Thread.Sleep(500);
 
-            var enumeratedActorMessage = messageOutbox.Where(msg=>msg is TargetedMessage tm && tm.Message is EnumeratedKnownActors)
+            var enumeratedActorMessage = messageOutbox
+                .Where(msg => msg is TargetedMessage tm && tm.Message is EnumeratedKnownActors)
                 .Cast<TargetedMessage>().First().Message as EnumeratedKnownActors;
 
             Assert.NotNull(enumeratedActorMessage);
-            
+
             var registeredActors = enumeratedActorMessage.KnownActorIds;
-            
+
             Assert.True(registeredActors.Count(id => id == actorId) > 0);
             Assert.True(
                 messageOutbox.Count(entry => { return entry is RegisteredActor msg && msg.ActorId == actorId; }) == 1);
@@ -75,16 +76,17 @@ namespace Tests
             var actorId = Guid.NewGuid();
             sendMessage(new RegisterActor(actorId, fakeActor));
             sendMessage(new EnumerateAllKnownActors(Guid.NewGuid()));
-            
+
             Thread.Sleep(500);
 
-            var enumeratedActorMessage = messageOutbox.Where(msg=>msg is TargetedMessage tm && tm.Message is EnumeratedKnownActors)
+            var enumeratedActorMessage = messageOutbox
+                .Where(msg => msg is TargetedMessage tm && tm.Message is EnumeratedKnownActors)
                 .Cast<TargetedMessage>().First().Message as EnumeratedKnownActors;
 
             Assert.NotNull(enumeratedActorMessage);
-            
+
             var registeredActors = enumeratedActorMessage.KnownActorIds;
-            
+
             Assert.True(registeredActors.Count(id => id == actorId) > 0);
 
             Assert.True(actorInbox.Count(msg => (msg is RegisteredActor registeredActorMessage) &&
@@ -112,8 +114,8 @@ namespace Tests
 
             var numberOfRegistrations = messageOutbox.Where(msg => msg is RegisteredActor).Cast<RegisteredActor>()
                 .Select(ra => ra.ActorId).Distinct().Count();
-            
-            Assert.Equal(1,numberOfRegistrations);
+
+            Assert.Equal(1, numberOfRegistrations);
         }
 
         [Fact]
@@ -177,13 +179,13 @@ namespace Tests
             // Request the list of registered actors
             var requesterId = Guid.NewGuid();
             sendMessage(new EnumerateAllKnownActors(requesterId));
-                        
+
             Thread.Sleep(500);
 
             var matchingEvents = outbox.Where(msg => msg is TargetedMessage)
                 .Cast<TargetedMessage>().ToArray();
-            
-            Assert.Equal(1, matchingEvents.Length);
+
+            Assert.True(matchingEvents.Length == 1);
 
             var targetEvent = matchingEvents.First().Message as EnumeratedKnownActors;
             Assert.NotNull(targetEvent);
@@ -234,15 +236,31 @@ namespace Tests
         }
 
         [Fact]
-        public void ShouldBeAbleToIdentifyAllActors()
+        public void ShouldForwardUnhandledMessagesToDeadLetterProcessing()
         {
-            throw new NotImplementedException("TODO: Implement ShouldBeAbleToIdentifyAllActors");
-        }
+            var deadLetters = new ConcurrentBag<object>();
+            Action<object> deadLetterMethod = msg => { deadLetters.Add(msg); };
 
-        [Fact]
-        public void ShouldRegisterAllActorsThatCanIdentifyThemselves()
-        {
-            throw new NotImplementedException("TODO: Implement ShouldRegisterAllActorsThatCanIdentifyThemselves");
+            _transport = new InMemoryMessageTransport(deadLetterMethod);
+            var sendMessage = _transport.CreateSender(_source.Token)
+                .WithMessageHandler(msg =>
+                {
+                    // Ignore the responses send to the outbox; we only care about the 
+                    // messages sent to the dead letter queue
+                });
+
+            var nonexistentActorId = Guid.NewGuid();
+            var unhandledMessage = "Hello, World";
+            sendMessage(new TargetedMessage(nonexistentActorId, unhandledMessage));
+            Thread.Sleep(500);
+
+            Assert.True(deadLetters.Count(msg => msg is TargetedMessage) == 1);
+
+            var targetedMessage = (TargetedMessage) deadLetters.First();
+            var actualMessage = targetedMessage.Message;
+
+            Assert.Equal(nonexistentActorId, targetedMessage.TargetActorId);
+            Assert.Equal(targetedMessage.Message, actualMessage);
         }
     }
 }

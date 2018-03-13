@@ -9,6 +9,16 @@ namespace Yarp
     public class InMemoryMessageTransport : IActor
     {
         private ConcurrentDictionary<Guid, IActor> _actors = new ConcurrentDictionary<Guid, IActor>();
+        private readonly Action<object> _deadLetterHandler;
+
+        public InMemoryMessageTransport() : this(delegate { })
+        {
+        }
+
+        public InMemoryMessageTransport(Action<object> deadLetterHandler)
+        {
+            _deadLetterHandler = deadLetterHandler;
+        }
 
         public async Task TellAsync(IContext context)
         {
@@ -33,9 +43,14 @@ namespace Yarp
                 }
             }
 
-            if (message is TargetedMessage targetedMessage &&
-                _actors.ContainsKey(targetedMessage.TargetActorId))
+            if (message is TargetedMessage targetedMessage)
             {
+                if (!_actors.ContainsKey(targetedMessage.TargetActorId))
+                {
+                    _deadLetterHandler(targetedMessage);
+                    return;
+                }
+
                 await _actors[targetedMessage.TargetActorId]
                     .TellAsync(new Context(targetedMessage, context.SendMessage, context.Token));
             }
