@@ -16,10 +16,12 @@ namespace Yarp
                 return;
 
             var message = context.Message;
-            if (message is RegisterActor msg && !_actors.ContainsKey(msg.ActorId))
+            if (message is RegisterActor msg && !_actors.ContainsKey(msg.ActorId) && msg.Actor != null)
             {
                 _actors[msg.ActorId] = msg.Actor;
-                context?.SendMessage(new RegisteredActor(msg.ActorId, msg.Actor));
+                var registeredActorMessage = new RegisteredActor(msg.ActorId, msg.Actor);
+                context?.SendMessage(registeredActorMessage);
+                await msg.Actor?.TellAsync(new Context(registeredActorMessage, context.SendMessage, context.Token));
             }
 
             if (message is BroadcastMessage broadcastMessage)

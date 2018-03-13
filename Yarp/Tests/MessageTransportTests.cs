@@ -53,7 +53,30 @@ namespace Tests
         [Fact]
         public void ShouldNotifyRegisteredActorOfActorIdAfterRegistration()
         {
-            throw new NotImplementedException("TODO: Implement ShouldNotifyRegisteredActorOfActorId");
+            var messageOutbox = new ConcurrentBag<object>();
+
+            // Keep track of the responses that come out of the
+            // message transport
+            var sendMessage = _transport.CreateSender(_source.Token)
+                .WithMessageHandler(msg => { messageOutbox.Add(msg); });
+
+            // Capture the messages that are sent back to the actor 
+            var actorInbox = new ConcurrentBag<object>();
+            Action<object> actorMessageHandler = msg => actorInbox.Add(msg);
+            var fakeActor = actorMessageHandler.ToActor();
+
+            var actorId = Guid.NewGuid();
+            sendMessage(new RegisterActor(actorId, fakeActor));
+
+            Thread.Sleep(500);
+
+            var registeredActors = _transport.RegisteredActors;
+            Assert.True(registeredActors.Count(entry => entry.Key == actorId) > 0);
+            Assert.True(
+                messageOutbox.Count(entry => { return entry is RegisteredActor msg && msg.ActorId == actorId; }) == 1);
+
+            Assert.True(actorInbox.Count(msg => (msg is RegisteredActor registeredActorMessage) &&
+                                                registeredActorMessage.ActorId == actorId) == 1);
         }
 
         [Fact]
