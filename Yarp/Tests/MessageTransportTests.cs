@@ -51,7 +51,7 @@ namespace Tests
         }
 
         [Fact]
-        public void ShouldNotifyRegisteredActorOfActorIdRegistration()
+        public void ShouldNotifyRegisteredActorOfActorIdAfterRegistration()
         {
             throw new NotImplementedException("TODO: Implement ShouldNotifyRegisteredActorOfActorId");
         }
@@ -102,15 +102,16 @@ namespace Tests
 
                 fakeActors.Add(fakeActor);
             }
-            
+
             // Broadcast the message
             var senderId = Guid.NewGuid();
             var messageToBroadcast = "Hello, World";
-            sendMessage(new BroadcastMessage(senderId,messageToBroadcast));
-            
+            sendMessage(new BroadcastMessage(senderId, messageToBroadcast));
+
             Thread.Sleep(500);
-            
-            Assert.True(combinedInbox.Count(msg=>(msg is string s) && s==messageToBroadcast) == numberOfExpectedMessages);
+
+            Assert.True(combinedInbox.Count(msg => (msg is string s) && s == messageToBroadcast) ==
+                        numberOfExpectedMessages);
         }
 
         [Fact]
@@ -122,7 +123,39 @@ namespace Tests
         [Fact]
         public void ShouldBeAbleToSendMessagesToSpecificActors()
         {
-            throw new NotImplementedException("TODO: Implement ShouldBeAbleToSendMessagesToSpecificActors");
+            var combinedInbox = new ConcurrentBag<object>();
+            var sendMessage = _transport.CreateSender(_source.Token)
+                .WithMessageHandler(msg =>
+                {
+                    // Ignore the responses send to the outbox; we only care about the 
+                    // actors receiving the messages
+                });
+
+            Action<object> receiveMessage = msg => combinedInbox.Add(msg);
+
+            // Register the target actor that should receive the message
+            var targetId = Guid.NewGuid();
+            var targetActor = A.Fake<IActor>();
+            sendMessage(new RegisterActor(targetId, targetActor));
+
+            // Register the actors that should not receive the messages at all
+            for (var i = 0; i < 1000; i++)
+            {
+                var actorId = Guid.NewGuid();
+                var fakeActor = receiveMessage.ToActor();
+                sendMessage(new RegisterActor(actorId, fakeActor));
+            }
+
+            var messageToSend = "Hello World";
+            sendMessage(new TargetedMessage(targetId, messageToSend));
+
+            Thread.Sleep(500);
+
+            // Verify that the target actor received the message
+            A.CallTo(() => targetActor.TellAsync(A<IContext>.Ignored)).MustHaveHappened();
+
+            // ...and none of the other actors received the message
+            Assert.True(combinedInbox.Count == 0);
         }
 
         [Fact]
