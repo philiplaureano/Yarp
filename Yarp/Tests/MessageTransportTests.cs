@@ -236,6 +236,31 @@ namespace Tests
         }
 
         [Fact]
+        public void ShouldForwardNonTargetedMessagesToDeadLetterProcessing()
+        {
+            var deadLetters = new ConcurrentBag<object>();
+            Action<object> deadLetterMethod = msg => { deadLetters.Add(msg); };
+
+            _transport = new InMemoryMessageTransport(deadLetterMethod);
+            var sendMessage = _transport.CreateSender(_source.Token)
+                .WithMessageHandler(msg =>
+                {
+                    // Ignore the responses send to the outbox; we only care about the 
+                    // messages sent to the dead letter queue
+                });
+
+            var unhandledMessage = "Hello, World!";
+            sendMessage(unhandledMessage);
+            
+            Thread.Sleep(500);
+            
+            Assert.True(deadLetters.Count(msg => msg is string) == 1);
+
+            var actualMessage = deadLetters.Cast<string>().First();
+            Assert.Equal(unhandledMessage, actualMessage);
+        }
+
+        [Fact]
         public void ShouldForwardUnhandledMessagesToDeadLetterProcessing()
         {
             var deadLetters = new ConcurrentBag<object>();

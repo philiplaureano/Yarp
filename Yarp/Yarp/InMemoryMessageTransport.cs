@@ -32,6 +32,7 @@ namespace Yarp
                 var registeredActorMessage = new RegisteredActor(msg.ActorId, msg.Actor);
                 context?.SendMessage(registeredActorMessage);
                 await msg.Actor?.TellAsync(new Context(registeredActorMessage, context.SendMessage, context.Token));
+                return;
             }
 
             if (message is BroadcastMessage broadcastMessage)
@@ -41,6 +42,7 @@ namespace Yarp
                 {
                     await actor.TellAsync(new Context(messagePayload, context.SendMessage, context.Token));
                 }
+                return;
             }
 
             if (message is TargetedMessage targetedMessage)
@@ -53,13 +55,18 @@ namespace Yarp
 
                 await _actors[targetedMessage.TargetActorId]
                     .TellAsync(new Context(targetedMessage, context.SendMessage, context.Token));
+                return;
             }
 
             if (message is EnumerateAllKnownActors enumerateAllKnownActors)
             {
                 context?.SendMessage(new TargetedMessage(enumerateAllKnownActors.RequesterId,
                     new EnumeratedKnownActors(_actors.Keys)));
+                return;
             }
+            
+            // Forward the message to the dead letter queue
+            _deadLetterHandler(message);
         }
     }
 }
