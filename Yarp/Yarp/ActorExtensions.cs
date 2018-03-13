@@ -5,6 +5,10 @@ namespace Yarp
 {
     public static class ActorExtensions
     {
+        public static IActor ToActor(this Action<object> handler)
+        {
+            return new FunctorAdapter(handler);
+        }
         public static Action<object> WithMessageHandler(this Func<Action<object>, Action<object>>
             handlerFactory, Action<object> handler)
         {

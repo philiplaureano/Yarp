@@ -100,7 +100,7 @@ namespace Tests
             Thread.Sleep(1000);
 
             // Assert
-            Assert.Equal(_elapsedEvents.Count, 1);
+            Assert.True(_elapsedEvents.Count == 1);
         }
 
         private Action<object> CreateCollector<TMessage>(Func<TMessage, bool> filter)
