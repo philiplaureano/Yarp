@@ -10,6 +10,30 @@ namespace Tests
         }
 
         [Fact]
+        public void ShouldBeAbleToGetFollowerIdWheneverIdIsRequested()
+        {
+            throw new NotImplementedException("TODO: Implement ShouldBeAbleToGetFollowerIdWheneverIdIsRequested");
+        }
+
+        [Fact]
+        public void ShouldBeAbleToReturnCurrentLog()
+        {
+            throw new NotImplementedException("TODO: Implement ShouldBeAbleToReturnCurrentLog");
+        }
+
+        [Fact]
+        public void ShouldBeAbleToReturnCurrentCommitIndex()
+        {
+            throw new NotImplementedException("TODO: Implement ShouldBeAbleToReturnCurrentCommitIndex");
+        }        
+
+        [Fact]
+        public void ShouldReturnCurrentTermWheneverTermIsRequested()
+        {
+            throw new NotImplementedException("TODO: Implement ShouldReturnCurrentTermWheneverTermIsRequested");
+        }
+
+        [Fact]
         public void MustSwitchToCandidateWhenElectionTimeoutOccurs()
         {
             throw new NotImplementedException("TODO: Implement MustSwitchToCandidateWhenElectionTimeoutOccurs");
