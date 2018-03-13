@@ -157,8 +157,11 @@ namespace Tests
             Action<object> receiveMessage = msg => combinedInbox.Add(msg);
 
             // Register the target actor that should receive the message
+            var targetInbox = new ConcurrentBag<object>();
+            Action<object> targetBehavior = msg => targetInbox.Add(msg);
+
             var targetId = Guid.NewGuid();
-            var targetActor = A.Fake<IActor>();
+            var targetActor = targetBehavior.ToActor();
             sendMessage(new RegisterActor(targetId, targetActor));
 
             // Register the actors that should not receive the messages at all
@@ -175,10 +178,10 @@ namespace Tests
             Thread.Sleep(500);
 
             // Verify that the target actor received the message
-            A.CallTo(() => targetActor.TellAsync(A<IContext>.Ignored)).MustHaveHappened();
+            Assert.True(targetInbox.Count(msg => msg.GetType() == typeof(TargetedMessage)) == 1);
 
             // ...and none of the other actors received the message
-            Assert.True(combinedInbox.Count == 0);
+            Assert.Equal(0, combinedInbox.Count(msg => msg.GetType() == typeof(TargetedMessage)));
         }
 
         [Fact]
