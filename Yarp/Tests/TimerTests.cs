@@ -41,7 +41,7 @@ namespace Tests
         public void ShouldSendNoMessagesIfCancellationIsRequested()
         {
             _cancellationTokenSource.Cancel();
-            
+
             Func<TimerTick, bool> filter = msg =>
                 msg.TimerId == _timerId;
 
@@ -59,6 +59,7 @@ namespace Tests
             // There should be zero events that have fired            
             Assert.Empty(_elapsedEvents);
         }
+
         [Fact]
         public void ShouldSendTimerTickMessageWhenAPeriodicIntervalIsSpecified()
         {
