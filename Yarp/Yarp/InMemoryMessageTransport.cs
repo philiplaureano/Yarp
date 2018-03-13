@@ -46,7 +46,5 @@ namespace Yarp
                     new EnumeratedKnownActors(_actors.Keys)));
             }
         }
-
-        public IReadOnlyCollection<KeyValuePair<Guid, IActor>> RegisteredActors => _actors;
     }
 }

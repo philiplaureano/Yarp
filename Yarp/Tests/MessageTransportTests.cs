@@ -41,11 +41,18 @@ namespace Tests
             var fakeActor = A.Fake<IActor>();
             var actorId = Guid.NewGuid();
             sendMessage(new RegisterActor(actorId, fakeActor));
+            sendMessage(new EnumerateAllKnownActors(Guid.NewGuid()));
 
             Thread.Sleep(500);
 
-            var registeredActors = _transport.RegisteredActors;
-            Assert.True(registeredActors.Count(entry => entry.Key == actorId) > 0);
+            var enumeratedActorMessage = messageOutbox.Where(msg=>msg is TargetedMessage tm && tm.Message is EnumeratedKnownActors)
+                .Cast<TargetedMessage>().First().Message as EnumeratedKnownActors;
+
+            Assert.NotNull(enumeratedActorMessage);
+            
+            var registeredActors = enumeratedActorMessage.KnownActorIds;
+            
+            Assert.True(registeredActors.Count(id => id == actorId) > 0);
             Assert.True(
                 messageOutbox.Count(entry => { return entry is RegisteredActor msg && msg.ActorId == actorId; }) == 1);
         }
@@ -67,13 +74,18 @@ namespace Tests
 
             var actorId = Guid.NewGuid();
             sendMessage(new RegisterActor(actorId, fakeActor));
-
+            sendMessage(new EnumerateAllKnownActors(Guid.NewGuid()));
+            
             Thread.Sleep(500);
 
-            var registeredActors = _transport.RegisteredActors;
-            Assert.True(registeredActors.Count(entry => entry.Key == actorId) > 0);
-            Assert.True(
-                messageOutbox.Count(entry => { return entry is RegisteredActor msg && msg.ActorId == actorId; }) == 1);
+            var enumeratedActorMessage = messageOutbox.Where(msg=>msg is TargetedMessage tm && tm.Message is EnumeratedKnownActors)
+                .Cast<TargetedMessage>().First().Message as EnumeratedKnownActors;
+
+            Assert.NotNull(enumeratedActorMessage);
+            
+            var registeredActors = enumeratedActorMessage.KnownActorIds;
+            
+            Assert.True(registeredActors.Count(id => id == actorId) > 0);
 
             Assert.True(actorInbox.Count(msg => (msg is RegisteredActor registeredActorMessage) &&
                                                 registeredActorMessage.ActorId == actorId) == 1);
@@ -98,8 +110,10 @@ namespace Tests
 
             Thread.Sleep(500);
 
-            var registeredActors = _transport.RegisteredActors;
-            Assert.True(registeredActors.Count(entry => entry.Key == actorId) == 1);
+            var numberOfRegistrations = messageOutbox.Where(msg => msg is RegisteredActor).Cast<RegisteredActor>()
+                .Select(ra => ra.ActorId).Distinct().Count();
+            
+            Assert.Equal(1,numberOfRegistrations);
         }
 
         [Fact]
