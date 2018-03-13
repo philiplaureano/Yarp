@@ -140,7 +140,42 @@ namespace Tests
         [Fact]
         public void ShouldBeAbleToEnumerateAllKnownActors()
         {
-            throw new NotImplementedException("TODO: Implement ShouldBeAbleToEnumerateAllKnownActors");
+            var outbox = new ConcurrentBag<object>();
+            var sendMessage = _transport.CreateSender(_source.Token)
+                .WithMessageHandler(msg => { outbox.Add(msg); });
+
+            Action<object> fakeActorBehavior = msg =>
+            {
+                /* Do nothing */
+            };
+
+            var expectedIds = new List<Guid>();
+            var numberOfActors = 1000;
+            for (var i = 0; i < numberOfActors; i++)
+            {
+                var actorId = Guid.NewGuid();
+                var fakeActor = fakeActorBehavior.ToActor();
+                sendMessage(new RegisterActor(actorId, fakeActor));
+
+                expectedIds.Add(actorId);
+            }
+
+            // Request the list of registered actors
+            var requesterId = Guid.NewGuid();
+            sendMessage(new EnumerateAllKnownActors(requesterId));
+                        
+            Thread.Sleep(500);
+
+            var matchingEvents = outbox.Where(msg => msg is TargetedMessage)
+                .Cast<TargetedMessage>().ToArray();
+            
+            Assert.Equal(1, matchingEvents.Length);
+
+            var targetEvent = matchingEvents.First().Message as EnumeratedKnownActors;
+            Assert.NotNull(targetEvent);
+
+            var results = targetEvent.KnownActorIds.ToHashSet();
+            Assert.Subset(expectedIds.ToHashSet(), results);
         }
 
         [Fact]

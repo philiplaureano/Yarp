@@ -39,6 +39,12 @@ namespace Yarp
                 await _actors[targetedMessage.TargetActorId]
                     .TellAsync(new Context(targetedMessage, context.SendMessage, context.Token));
             }
+
+            if (message is EnumerateAllKnownActors enumerateAllKnownActors)
+            {
+                context?.SendMessage(new TargetedMessage(enumerateAllKnownActors.RequesterId,
+                    new EnumeratedKnownActors(_actors.Keys)));
+            }
         }
 
         public IReadOnlyCollection<KeyValuePair<Guid, IActor>> RegisteredActors => _actors;
