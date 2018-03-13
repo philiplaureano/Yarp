@@ -9,10 +9,10 @@ namespace Yarp
     public class InMemoryMessageTransport : IActor
     {
         private ConcurrentDictionary<Guid,IActor> _actors = new ConcurrentDictionary<Guid, IActor>();
-        public Task TellAsync(IContext context)
+        public async Task TellAsync(IContext context)
         {
             if (context.Token.IsCancellationRequested)
-                return Task.FromCanceled(context.Token);
+                return;
             
             var message = context.Message;
             if (message is RegisterActor msg && !_actors.ContainsKey(msg.ActorId))
@@ -20,8 +20,15 @@ namespace Yarp
                 _actors[msg.ActorId] = msg.Actor;
                 context?.SendMessage(new RegisteredActor(msg.ActorId, msg.Actor));
             }
-                
-            return Task.FromResult(0);
+
+            if (message is BroadcastMessage broadcastMessage)
+            {
+                var messagePayload = broadcastMessage.Message;
+                foreach (var actor in _actors.Values)
+                {
+                    await actor.TellAsync(new Context(messagePayload, context.SendMessage, context.Token));
+                }
+            }            
         }
 
         public IReadOnlyCollection<KeyValuePair<Guid, IActor>> RegisteredActors => _actors;

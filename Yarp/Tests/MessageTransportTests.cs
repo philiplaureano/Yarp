@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using FakeItEasy;
@@ -45,10 +46,14 @@ namespace Tests
 
             var registeredActors = _transport.RegisteredActors;
             Assert.True(registeredActors.Count(entry => entry.Key == actorId) > 0);
-            Assert.True(messageOutbox.Count(entry =>
-            {
-                return entry is RegisteredActor msg && msg.ActorId == actorId;
-            }) == 1);
+            Assert.True(
+                messageOutbox.Count(entry => { return entry is RegisteredActor msg && msg.ActorId == actorId; }) == 1);
+        }
+
+        [Fact]
+        public void ShouldNotifyRegisteredActorOfActorIdRegistration()
+        {
+            throw new NotImplementedException("TODO: Implement ShouldNotifyRegisteredActorOfActorId");
         }
 
         [Fact]
@@ -77,7 +82,35 @@ namespace Tests
         [Fact]
         public void ShouldBeAbleToBroadcastMessagesToAllKnownActors()
         {
-            throw new NotImplementedException("TODO: Implement ShouldBeAbleToBroadcastMessagesToAllKnownActors");
+            var combinedInbox = new ConcurrentBag<object>();
+            var sendMessage = _transport.CreateSender(_source.Token)
+                .WithMessageHandler(msg =>
+                {
+                    // Ignore the responses send to the outbox; we only care about the 
+                    // actors receiving the messages
+                });
+
+            Action<object> receiveMessage = msg => combinedInbox.Add(msg);
+
+            var numberOfExpectedMessages = 1000;
+            var fakeActors = new List<IActor>();
+            for (var i = 0; i < numberOfExpectedMessages; i++)
+            {
+                var actorId = Guid.NewGuid();
+                var fakeActor = receiveMessage.ToActor();
+                sendMessage(new RegisterActor(actorId, fakeActor));
+
+                fakeActors.Add(fakeActor);
+            }
+            
+            // Broadcast the message
+            var senderId = Guid.NewGuid();
+            var messageToBroadcast = "Hello, World";
+            sendMessage(new BroadcastMessage(senderId,messageToBroadcast));
+            
+            Thread.Sleep(500);
+            
+            Assert.True(combinedInbox.Count(msg=>(msg is string s) && s==messageToBroadcast) == numberOfExpectedMessages);
         }
 
         [Fact]
