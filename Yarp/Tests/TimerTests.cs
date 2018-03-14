@@ -48,8 +48,8 @@ namespace Tests
             var delay = TimeSpan.FromMilliseconds(0);
             var interval = TimeSpan.FromMilliseconds(5);
 
-            var sendMessage = _timerActor.CreateSender(_cancellationTokenSource.Token)
-                .WithMessageHandler(CreateCollector(filter));
+            var sendMessage = _timerActor.CreateSenderMethod(_cancellationTokenSource.Token)
+                .WithOutboundMessageHandler(CreateCollector(filter));
 
             sendMessage(new SetTimer(_timerId, delay, interval));
 
@@ -69,8 +69,8 @@ namespace Tests
             var delay = TimeSpan.FromMilliseconds(0);
             var interval = TimeSpan.FromMilliseconds(5);
 
-            var sendMessage = _timerActor.CreateSender(_cancellationTokenSource.Token)
-                .WithMessageHandler(CreateCollector(filter));
+            var sendMessage = _timerActor.CreateSenderMethod(_cancellationTokenSource.Token)
+                .WithOutboundMessageHandler(CreateCollector(filter));
 
             sendMessage(new SetTimer(_timerId, delay, interval));
 
@@ -92,8 +92,8 @@ namespace Tests
             var delay = TimeSpan.FromMilliseconds(100);
             var interval = Timeout.InfiniteTimeSpan;
 
-            var sendMessage = _timerActor.CreateSender(_cancellationTokenSource.Token)
-                .WithMessageHandler(CreateCollector(hasTimeExpired));
+            var sendMessage = _timerActor.CreateSenderMethod(_cancellationTokenSource.Token)
+                .WithOutboundMessageHandler(CreateCollector(hasTimeExpired));
 
             sendMessage(new SetTimer(_timerId, delay, interval));
 

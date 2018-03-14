@@ -9,19 +9,19 @@ namespace Yarp
         {
             return new FunctorAdapter(handler);
         }
-        public static Action<object> WithMessageHandler(this Func<Action<object>, Action<object>>
+        public static Action<object> WithOutboundMessageHandler(this Func<Action<object>, Action<object>>
             handlerFactory, Action<object> handler)
         {
             return handlerFactory(handler);
         }
 
-        public static Func<Action<object>, Action<object>> CreateSender(this IActor actor,
+        public static Func<Action<object>, Action<object>> CreateSenderMethod(this IActor actor,
             CancellationToken token)
         {
-            return handler => actor.CreateSender(handler, token);
+            return handler => actor.CreateSenderMethod(handler, token);
         }
 
-        public static Action<object> CreateSender(this IActor actor,
+        public static Action<object> CreateSenderMethod(this IActor actor,
             Action<object> outboundMessageHandler, CancellationToken token)
         {
             return async msg =>

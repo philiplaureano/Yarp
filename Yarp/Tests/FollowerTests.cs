@@ -88,7 +88,7 @@ namespace Tests
             Action<object> outboxHandler = msg => { outbox.Add(msg); };
 
             var token = _source.Token;
-            var sendMessage = _raftNode.CreateSender(outboxHandler, token);
+            var sendMessage = _raftNode.CreateSenderMethod(outboxHandler, token);
             sendMessage(createMessageToSend());
 
             Thread.Sleep(500);

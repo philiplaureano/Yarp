@@ -35,8 +35,8 @@ namespace Tests
 
             // Keep track of the responses that come out of the
             // message transport
-            var sendMessage = _transport.CreateSender(_source.Token)
-                .WithMessageHandler(msg => { messageOutbox.Add(msg); });
+            var sendMessage = _transport.CreateSenderMethod(_source.Token)
+                .WithOutboundMessageHandler(msg => { messageOutbox.Add(msg); });
 
             var fakeActor = A.Fake<IActor>();
             var actorId = Guid.NewGuid();
@@ -65,8 +65,8 @@ namespace Tests
 
             // Keep track of the responses that come out of the
             // message transport
-            var sendMessage = _transport.CreateSender(_source.Token)
-                .WithMessageHandler(msg => { messageOutbox.Add(msg); });
+            var sendMessage = _transport.CreateSenderMethod(_source.Token)
+                .WithOutboundMessageHandler(msg => { messageOutbox.Add(msg); });
 
             // Capture the messages that are sent back to the actor 
             var actorInbox = new ConcurrentBag<object>();
@@ -100,8 +100,8 @@ namespace Tests
 
             // Keep track of the responses that come out of the
             // message transport
-            var sendMessage = _transport.CreateSender(_source.Token)
-                .WithMessageHandler(msg => { messageOutbox.Add(msg); });
+            var sendMessage = _transport.CreateSenderMethod(_source.Token)
+                .WithOutboundMessageHandler(msg => { messageOutbox.Add(msg); });
 
             var fakeActor = A.Fake<IActor>();
             var actorId = Guid.NewGuid();
@@ -122,8 +122,8 @@ namespace Tests
         public void ShouldBeAbleToBroadcastMessagesToAllKnownActors()
         {
             var combinedInbox = new ConcurrentBag<object>();
-            var sendMessage = _transport.CreateSender(_source.Token)
-                .WithMessageHandler(msg =>
+            var sendMessage = _transport.CreateSenderMethod(_source.Token)
+                .WithOutboundMessageHandler(msg =>
                 {
                     // Ignore the responses send to the outbox; we only care about the 
                     // actors receiving the messages
@@ -157,8 +157,8 @@ namespace Tests
         public void ShouldBeAbleToEnumerateAllKnownActors()
         {
             var outbox = new ConcurrentBag<object>();
-            var sendMessage = _transport.CreateSender(_source.Token)
-                .WithMessageHandler(msg => { outbox.Add(msg); });
+            var sendMessage = _transport.CreateSenderMethod(_source.Token)
+                .WithOutboundMessageHandler(msg => { outbox.Add(msg); });
 
             Action<object> fakeActorBehavior = msg =>
             {
@@ -198,8 +198,8 @@ namespace Tests
         public void ShouldBeAbleToSendMessagesToSpecificActors()
         {
             var combinedInbox = new ConcurrentBag<object>();
-            var sendMessage = _transport.CreateSender(_source.Token)
-                .WithMessageHandler(msg =>
+            var sendMessage = _transport.CreateSenderMethod(_source.Token)
+                .WithOutboundMessageHandler(msg =>
                 {
                     // Ignore the responses send to the outbox; we only care about the 
                     // actors receiving the messages
@@ -242,8 +242,8 @@ namespace Tests
             Action<object> deadLetterMethod = msg => { deadLetters.Add(msg); };
 
             _transport = new InMemoryMessageTransport(deadLetterMethod);
-            var sendMessage = _transport.CreateSender(_source.Token)
-                .WithMessageHandler(msg =>
+            var sendMessage = _transport.CreateSenderMethod(_source.Token)
+                .WithOutboundMessageHandler(msg =>
                 {
                     // Ignore the responses send to the outbox; we only care about the 
                     // messages sent to the dead letter queue
@@ -267,8 +267,8 @@ namespace Tests
             Action<object> deadLetterMethod = msg => { deadLetters.Add(msg); };
 
             _transport = new InMemoryMessageTransport(deadLetterMethod);
-            var sendMessage = _transport.CreateSender(_source.Token)
-                .WithMessageHandler(msg =>
+            var sendMessage = _transport.CreateSenderMethod(_source.Token)
+                .WithOutboundMessageHandler(msg =>
                 {
                     // Ignore the responses send to the outbox; we only care about the 
                     // messages sent to the dead letter queue
