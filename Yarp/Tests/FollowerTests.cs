@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using Xunit;
@@ -11,22 +12,37 @@ namespace Tests
     public class FollowerTests : IDisposable
     {
         private CancellationTokenSource _source;
+        private RaftNode _raftNode;
 
         public FollowerTests()
         {
             _source = new CancellationTokenSource();
+            _raftNode = new RaftNode();
         }
 
         public void Dispose()
         {
             _source?.Cancel();
             _source = null;
+            _raftNode = null;
         }
 
         [Fact]
         public void ShouldBeAbleToGetFollowerIdWheneverIdIsRequested()
         {
-            throw new NotImplementedException("TODO: Implement ShouldBeAbleToGetFollowerIdWheneverIdIsRequested");
+            var nodeId = Guid.NewGuid();
+            _raftNode = new RaftNode(nodeId);
+            var requesterId = Guid.NewGuid();
+            Func<object> createMessageToSend = () => new Request<GetId>(requesterId, new GetId());
+            Action<IEnumerable<object>> checkResults = outbox =>
+            {
+                var response = outbox.Cast<Response<GetId>>().First();
+                Assert.Equal(requesterId, response.RequesterId);
+                Assert.Equal(nodeId,response.ResponderId);
+                Assert.Equal(nodeId, response.ResponseMessage);
+            };
+
+            RunTest(createMessageToSend, checkResults);
         }
 
         [Fact]
@@ -45,24 +61,39 @@ namespace Tests
         public void ShouldReturnCurrentTermWheneverTermIsRequested()
         {
             var currentTerm = 42;
-            var node = new RaftNode(currentTerm);
 
+            _raftNode = new RaftNode(Guid.NewGuid(), currentTerm);
+
+            // Queue the request
+            var requesterId = Guid.NewGuid();
+            Func<object> createMessageToSend = () => new Request<GetCurrentTerm>(requesterId,
+                new GetCurrentTerm());
+
+            // Match the current term
+            void CheckResults(IEnumerable<object> results)
+            {
+                Assert.True(results.Count(msg => msg is Response<GetCurrentTerm>) == 1);
+                var response = results.Cast<Response<GetCurrentTerm>>().First();
+                Assert.Equal(currentTerm, response.ResponseMessage);
+            }
+
+            RunTest(createMessageToSend, CheckResults);
+        }
+
+        private void RunTest(Func<object> createMessageToSend,
+            Action<IEnumerable<object>> checkResults)
+        {
             // Collect the results in the outbox
             var outbox = new ConcurrentBag<object>();
             Action<object> outboxHandler = msg => { outbox.Add(msg); };
 
-            // Queue the request
-            var requesterId = Guid.NewGuid();
             var token = _source.Token;
-            var sendMessage = node.CreateSender(outboxHandler, token);
-            sendMessage(new Request<GetCurrentTerm>(requesterId, new GetCurrentTerm()));
+            var sendMessage = _raftNode.CreateSender(outboxHandler, token);
+            sendMessage(createMessageToSend());
 
             Thread.Sleep(500);
 
-            // Match the current term
-            Assert.True(outbox.Count(msg => msg is Response<GetCurrentTerm>) == 1);
-            var response = outbox.Cast<Response<GetCurrentTerm>>().First();
-            Assert.Equal(currentTerm, response.ResponseMessage);
+            checkResults(outbox);
         }
 
         [Fact]
