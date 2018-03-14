@@ -18,7 +18,7 @@ namespace Yarp
                 return Task.FromCanceled(context.Token);
             
             _handler(context.Message);
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
     }
 }

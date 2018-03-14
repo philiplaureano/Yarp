@@ -21,7 +21,7 @@ namespace Yarp
 
             timer.Change(setMessage.DueTime, setMessage.Period);
 
-            return Task.FromResult(0);
+            return Task.CompletedTask;
         }
 
         private void OnTimerCallback(object state)
