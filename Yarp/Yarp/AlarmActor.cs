@@ -29,61 +29,61 @@ namespace Yarp
                 _cancelledAlarms[cancelAlarm.AlarmId] = cancelAlarm.AlarmId;
             }
 
-            if (message is SetAlarm setAlarm)
+            if (!(message is SetAlarm setAlarm)) 
+                return Task.CompletedTask;
+            
+            var alarmId = setAlarm.AlarmId;
+            var handler = setAlarm.AlarmHandler;
+            var expirationTime = setAlarm.ExpirationTime;
+
+            _alarmHandlers[alarmId] = handler;
+
+            void TimerCallback(object msg)
             {
-                var alarmId = setAlarm.AlarmId;
-                var handler = setAlarm.AlarmHandler;
-                var expirationTime = setAlarm.ExpirationTime;
+                if (!(msg is Guid))
+                    return;
 
-                _alarmHandlers[alarmId] = handler;
+                var currentAlarmId = (Guid) msg;
+                if (!_alarmHandlers.ContainsKey(currentAlarmId))
+                    return;
 
-                void TimerCallback(object msg)
+                // Don't trigger the alarm if it has been cancelled
+                if (!_cancelledAlarms.ContainsKey(currentAlarmId))
                 {
-                    if (!(msg is Guid))
-                        return;
-
-                    var currentAlarmId = (Guid) msg;
-                    if (!_alarmHandlers.ContainsKey(currentAlarmId))
-                        return;
-
-                    // Don't trigger the alarm if it has been cancelled
-                    if (!_cancelledAlarms.ContainsKey(currentAlarmId))
+                    // Delay the alarm if it has been snoozed
+                    var targetHandler = _alarmHandlers[currentAlarmId];
+                    if (_snoozedAlarms.ContainsKey(currentAlarmId))
                     {
-                        // Delay the alarm if it has been snoozed
-                        var targetHandler = _alarmHandlers[currentAlarmId];
-                        if (_snoozedAlarms.ContainsKey(currentAlarmId))
-                        {
-                            var snoozeTime = _snoozedAlarms[currentAlarmId];
-                            this.Tell(new SetAlarm(currentAlarmId, snoozeTime, targetHandler));
+                        var snoozeTime = _snoozedAlarms[currentAlarmId];
+                        this.Tell(new SetAlarm(currentAlarmId, snoozeTime, targetHandler));
 
-                            TimeSpan ignoredParamter;
-                            _snoozedAlarms.TryRemove(currentAlarmId, out ignoredParamter);
+                        TimeSpan ignoredParamter;
+                        _snoozedAlarms.TryRemove(currentAlarmId, out ignoredParamter);
                             
-                            return;
-                        }
-
-                        targetHandler?.Invoke(new AlarmTriggered(alarmId, DateTime.UtcNow));
+                        return;
                     }
 
-                    // Once the alarm is triggered, remove the alarm
-                    Action<object> getRemovedValue;
-                    _alarmHandlers.TryRemove(currentAlarmId, out getRemovedValue);
-
-                    // Remove the entry for the cancelled alarm
-                    if (_cancelledAlarms.ContainsKey(currentAlarmId))
-                    {
-                        Guid ignoredParamter;
-                        _cancelledAlarms.TryRemove(currentAlarmId, out ignoredParamter);   
-                    }
+                    targetHandler?.Invoke(new AlarmTriggered(alarmId, DateTime.UtcNow));
                 }
 
-                var timer = new Timer(TimerCallback,
-                    alarmId,
-                    Timeout.InfiniteTimeSpan,
-                    Timeout.InfiniteTimeSpan);
+                // Once the alarm is triggered, remove the alarm
+                Action<object> getRemovedValue;
+                _alarmHandlers.TryRemove(currentAlarmId, out getRemovedValue);
 
-                timer.Change(expirationTime, Timeout.InfiniteTimeSpan);
+                // Remove the entry for the cancelled alarm
+                if (_cancelledAlarms.ContainsKey(currentAlarmId))
+                {
+                    Guid ignoredParamter;
+                    _cancelledAlarms.TryRemove(currentAlarmId, out ignoredParamter);   
+                }
             }
+
+            var timer = new Timer(TimerCallback,
+                alarmId,
+                Timeout.InfiniteTimeSpan,
+                Timeout.InfiniteTimeSpan);
+
+            timer.Change(expirationTime, Timeout.InfiniteTimeSpan);
 
             return Task.CompletedTask;
         }

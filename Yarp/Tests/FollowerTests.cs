@@ -28,6 +28,17 @@ namespace Tests
         }
 
         [Fact]
+        public void ShouldBroadcastRequestVoteIfElectionTimerExpires()
+        {
+            throw new NotImplementedException("TODO: Implement ShouldRequestVoteIfElectionTimerExpires");
+        }
+        
+        [Fact]
+        public void ShouldEmitChangeEventsWhenChangingRoles()
+        {
+            throw new NotImplementedException("TODO: Implement ShouldEmitChangeEventsWhenChangingRoles");
+        }
+        [Fact]
         public void ShouldBeAbleToGetFollowerIdWheneverIdIsRequested()
         {
             var nodeId = Guid.NewGuid();
