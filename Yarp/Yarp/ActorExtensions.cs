@@ -22,6 +22,9 @@ namespace Yarp
                 .Cast<Response<T>>()
                 .ToArray();
 
+            if(!responses.Any())
+                return Response<T>.Empty;
+            
             return responses.First();
         }
         public static IEnumerable<object> Tell(this IActor actor, object message)
