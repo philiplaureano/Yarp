@@ -8,6 +8,8 @@ namespace Yarp
     {
         private readonly int _term;
         private Guid _nodeId;
+        private int _minMilliseconds;
+        private int _maxMilliseconds;
 
         public RaftNode() : this(Guid.NewGuid())
         {
@@ -33,6 +35,31 @@ namespace Yarp
                 var senderId = getIdRequest.RequesterId;
                 context?.SendMessage(new Response<GetId>(senderId, _nodeId, _nodeId));
             }
+
+            if (message is Request<SetElectionTimeoutRange> setTimeoutRequest)
+            {
+                var setTimeoutMessage = setTimeoutRequest.RequestMessage;
+                _minMilliseconds = setTimeoutMessage.MinMilliseconds;
+                _maxMilliseconds = setTimeoutMessage.MaxMilliseconds;
+                
+                var response = new CurrentElectionTimeOutRange(_nodeId,_minMilliseconds,
+                    _maxMilliseconds);
+                
+                context?.SendMessage(
+                    new Response<SetElectionTimeoutRange>(setTimeoutRequest.RequesterId,
+                    _nodeId,response));
+            }
+
+            if (message is Request<GetCurrentElectionTimeOutRange> getTimeoutRequest)
+            {
+                var response = new CurrentElectionTimeOutRange(_nodeId,_minMilliseconds,
+                    _maxMilliseconds);
+                
+                context?.SendMessage(
+                    new Response<GetCurrentElectionTimeOutRange>(getTimeoutRequest.RequesterId,
+                        _nodeId,response));
+            }
+            
             return Task.CompletedTask;
         }
     }
