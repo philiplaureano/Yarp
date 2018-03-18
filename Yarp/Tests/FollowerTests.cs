@@ -32,12 +32,46 @@ namespace Tests
         {
             throw new NotImplementedException("TODO: Implement ShouldRequestVoteIfElectionTimerExpires");
         }
-        
+
         [Fact]
         public void ShouldEmitChangeEventsWhenChangingRoles()
         {
             throw new NotImplementedException("TODO: Implement ShouldEmitChangeEventsWhenChangingRoles");
         }
+
+        [Fact]
+        public void ShouldResetElectionTimerWhenAnAppendEntriesRPCHasBeenMade()
+        {
+            throw new NotImplementedException();
+        }
+
+        [Fact]
+        public void ShouldBeAbleToGetLastTimestampOfLatestHeartbeat()
+        {
+            // The first response should be DateTime.Never
+            var requesterId = Guid.NewGuid();
+            var response = _raftNode.Request(requesterId, () => new GetLastUpdatedTimestamp());
+            Assert.NotNull(response);
+            Assert.IsType<DateTime>(response.ResponseMessage);
+
+            var lastUpdated = (DateTime) response.ResponseMessage;
+            Assert.True(lastUpdated.Equals(default(DateTime)));
+            Assert.True(lastUpdated.Equals(DateTime.MinValue));
+
+            var currentTime = DateTime.UtcNow;
+            var appendEntries = new AppendEntries(0, Guid.NewGuid(), 0, 0, new object[0], 0);
+            _raftNode.Tell(appendEntries);
+
+            var secondResponse = _raftNode.Request(requesterId, () => new GetLastUpdatedTimestamp());
+            Assert.NotNull(secondResponse);
+            Assert.IsType<DateTime>(secondResponse.ResponseMessage);
+
+            // The last updated timestamp should be relatively similar to the current time
+            var timestamp = (DateTime) secondResponse.ResponseMessage;
+            var timeDifference = timestamp - currentTime;
+            Assert.True(timeDifference <= TimeSpan.FromSeconds(5));
+        }
+
         [Fact]
         public void ShouldBeAbleToGetFollowerIdWheneverIdIsRequested()
         {
@@ -98,13 +132,13 @@ namespace Tests
 
             var response =
                 _raftNode.Request(requesterId, () => new GetCurrentElectionTimeOutRange());
-            
+
             Assert.NotEqual(Response<GetCurrentElectionTimeOutRange>.Empty, response);
             Assert.IsType<CurrentElectionTimeOutRange>(response.ResponseMessage);
-            
+
             var timeoutRange = (CurrentElectionTimeOutRange) response.ResponseMessage;
-            Assert.Equal(minMilliseconds,timeoutRange.MinMilliseconds);
-            Assert.Equal(maxMilliseconds,timeoutRange.MaxMilliseconds);
+            Assert.Equal(minMilliseconds, timeoutRange.MinMilliseconds);
+            Assert.Equal(maxMilliseconds, timeoutRange.MaxMilliseconds);
         }
 
         [Fact]
