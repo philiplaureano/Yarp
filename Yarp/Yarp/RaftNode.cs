@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Yarp.Messages;
@@ -18,6 +20,7 @@ namespace Yarp
         private DateTime _dateLastAppended = DateTime.MinValue;
 
         private readonly Action<object> _sendNetworkMessage;
+        private readonly Func<IEnumerable<Guid>> _getClusterActorIds;
         private Timer _timer;
 
         private Guid _votedFor = Guid.Empty;
@@ -26,15 +29,17 @@ namespace Yarp
         private int _lastLogIndex;
         private int _lastLogTerm;
 
-        public RaftNode(Action<object> sendNetworkMessage) : this(Guid.NewGuid(), sendNetworkMessage)
+        public RaftNode(Action<object> sendNetworkMessage) : this(Guid.NewGuid(), sendNetworkMessage, () => new Guid[0])
         {
         }
 
-        public RaftNode(Guid nodeId, Action<object> sendNetworkMessage, int term = 0,
-            int heartbeatTimeoutInMilliseconds = 300)
+        public RaftNode(Guid nodeId, Action<object> sendNetworkMessage, 
+            Func<IEnumerable<Guid>> getClusterActorIds,
+            int term = 0, int heartbeatTimeoutInMilliseconds = 300)
         {
             _nodeId = nodeId;
             _sendNetworkMessage = sendNetworkMessage;
+            _getClusterActorIds = getClusterActorIds;
             _term = term;
             _currentHeartbeatTimeout = TimeSpan.FromMilliseconds(heartbeatTimeoutInMilliseconds);
 
@@ -74,6 +79,8 @@ namespace Yarp
                 AddMessageHandler(handleRequest, handlers);
             }
 
+            // Unwrap targeted messages by default
+            AddMessageHandler<TargetedMessage>(HandleTargetedMessage, handlers);
             AddHandler<GetCurrentTerm>(HandleGetCurrentTermRequest);
             AddHandler<GetId>(HandleGetIdRequest);
             AddHandler<SetElectionTimeoutRange>(HandleSetElectionTimeoutRangeRequest);
@@ -155,6 +162,16 @@ namespace Yarp
             this.Tell(new TimerTick(_nodeId, DateTime.UtcNow));
         }
 
+        private void HandleTargetedMessage(IContext context, TargetedMessage targetedMessage)
+        {
+            // Ignore messages not targeted at this current actor
+            if (targetedMessage?.TargetActorId != _nodeId)
+                return;
+            
+            // Unwrap the message and process it
+            this.Tell(targetedMessage.Message);
+        }
+        
         private void HandleFollowerTimerTick(IContext context, TimerTick tick)
         {
             // Check if the heartbeat timeout has expired
@@ -173,10 +190,15 @@ namespace Yarp
                 _currentHeartbeatTimeout = TimeSpan.FromMilliseconds(nextTimeoutInMilliseconds);
                 _dateLastAppended = DateTime.UtcNow;
 
-                // Broadcast the vote request
-                _sendNetworkMessage(new BroadcastMessage(_nodeId,
-                    new RequestVote(newTerm, _nodeId, _lastLogIndex, _lastLogTerm)));
+                // Send the vote request to other actors
+                var otherActors = _getClusterActorIds().Where(id => id != _nodeId).ToArray();
 
+                foreach (var actorId in otherActors)
+                {
+                    _sendNetworkMessage(new TargetedMessage(actorId,
+                        new RequestVote(newTerm, _nodeId, _lastLogIndex, _lastLogTerm)));   
+                }                                
+                
                 // Become a candidate node
                 Become(Candidate);
             }

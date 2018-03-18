@@ -34,7 +34,7 @@ namespace Tests
             // Route all the network output to the collection object
             var nodeId = Guid.NewGuid();
             var outbox = new ConcurrentBag<object>();
-            _raftNode = new RaftNode(nodeId, outbox.Add);
+            _raftNode = new RaftNode(nodeId, outbox.Add, ()=>new Guid[0]);
 
             // The first response should be DateTime.Never
             var requesterId = Guid.NewGuid();
@@ -63,7 +63,7 @@ namespace Tests
         }
 
         [Fact]
-        public void ShouldBroadcastRequestVoteIfElectionTimerExpires()
+        public void ShouldSendRequestVoteToOtherActorsInTheClusterIfElectionTimerExpires()
         {
             var minMilliseconds = 150;
             var maxMilliseconds = 300;
@@ -71,8 +71,12 @@ namespace Tests
             var nodeId = Guid.NewGuid();
             var term = 42;
 
+            var numberOfActorsInCluster = 5;
+            var actorIds = Enumerable.Range(0, numberOfActorsInCluster)
+                .Select(_ => Guid.NewGuid()).ToArray();
+
             var outbox = new ConcurrentBag<object>();
-            _raftNode = new RaftNode(nodeId, outbox.Add, term);
+            _raftNode = new RaftNode(nodeId, outbox.Add, () => actorIds, term);
 
             // Set the request timeout to be from 150-300ms
             var requesterId = Guid.NewGuid();
@@ -84,19 +88,21 @@ namespace Tests
             // Let the timer expire
             Thread.Sleep(500);
 
-            var voteRequests = outbox.Where(msg => msg is BroadcastMessage bm && bm.Message is RequestVote)
-                .Cast<BroadcastMessage>().ToArray();
+            var voteRequests = outbox.Where(msg => msg is TargetedMessage tm && tm.Message is RequestVote)
+                .Cast<TargetedMessage>().ToArray();
 
             Assert.NotEmpty(voteRequests);
-            Assert.True(voteRequests.Count() == 1);
+            Assert.True(voteRequests.Count() == numberOfActorsInCluster);
+            
+            for (var i = 0; i < numberOfActorsInCluster; i++)
+            {                
+                var targetedMessage = voteRequests[i];                
+                var voteRequest = (RequestVote) targetedMessage.Message;
+                Assert.Equal(nodeId, voteRequest.CandidateId);
 
-            var broadcastedMessage = voteRequests.First();
-            var voteRequest = (RequestVote) broadcastedMessage.Message;
-
-            Assert.Equal(nodeId, voteRequest.CandidateId);
-
-            // Note: The new candidate must increment the current vote by one
-            Assert.Equal(term + 1, voteRequest.Term);
+                // Note: The new candidate must increment the current vote by one
+                Assert.Equal(term + 1, voteRequest.Term);
+            }           
         }
 
         [Fact]
@@ -137,7 +143,7 @@ namespace Tests
         public void ShouldBeAbleToGetFollowerIdWheneverIdIsRequested()
         {
             var nodeId = Guid.NewGuid();
-            _raftNode = new RaftNode(nodeId, delegate { });
+            _raftNode = new RaftNode(nodeId, delegate { }, ()=>new Guid[0]);
             var requesterId = Guid.NewGuid();
             Func<object> createMessageToSend = () => new Request<GetId>(requesterId, new GetId());
             Action<IEnumerable<object>> checkResults = outbox =>
@@ -219,7 +225,7 @@ namespace Tests
         {
             var currentTerm = 42;
 
-            _raftNode = new RaftNode(Guid.NewGuid(), delegate { }, currentTerm);
+            _raftNode = new RaftNode(Guid.NewGuid(), delegate { }, ()=>new Guid[0], currentTerm);
 
             // Queue the request
             var requesterId = Guid.NewGuid();
@@ -261,31 +267,31 @@ namespace Tests
 
         [Fact]
         public void MustVoteForCandidateIfCandidateTermIsHigherThanCurrentTerm()
-        {            
-            var currentTerm = 42;   
-            
-            _raftNode = new RaftNode(Guid.NewGuid(), delegate { }, currentTerm);
+        {
+            var currentTerm = 42;
+
+            _raftNode = new RaftNode(Guid.NewGuid(), delegate { }, ()=>new Guid[0], currentTerm);
             var response = _raftNode.Request(Guid.NewGuid(), () => new RequestVote(43, Guid.NewGuid(), 0, 0));
 
             Assert.NotNull(response);
             Assert.IsType<RequestVoteResult>(response.ResponseMessage);
-            
+
             var result = (RequestVoteResult) response.ResponseMessage;
             Assert.Equal(currentTerm, result.Term);
-            Assert.True(result.VoteGranted);            
+            Assert.True(result.VoteGranted);
         }
 
         [Fact]
         public void MustRejectVoteIfVoteRequestIsInvalid()
         {
             // Reply false if term < currentTerm (§5.1)
-            var currentTerm = 42;   
-            _raftNode = new RaftNode(Guid.NewGuid(), delegate { }, currentTerm);
+            var currentTerm = 42;
+            _raftNode = new RaftNode(Guid.NewGuid(), delegate { }, ()=>new Guid[0], currentTerm);
             var response = _raftNode.Request(Guid.NewGuid(), () => new RequestVote(0, Guid.NewGuid(), 0, 0));
 
             Assert.NotNull(response);
             Assert.IsType<RequestVoteResult>(response.ResponseMessage);
-            
+
             var result = (RequestVoteResult) response.ResponseMessage;
             Assert.Equal(currentTerm, result.Term);
             Assert.False(result.VoteGranted);
