@@ -49,7 +49,7 @@ namespace Tests
             var currentTime = DateTime.UtcNow;
             var candidateId = Guid.NewGuid();
 
-            var requestVote = new Request<RequestVote>(requesterId, new RequestVote(42, candidateId, 0, 0));            
+            var requestVote = new Request<RequestVote>(requesterId, new RequestVote(42, candidateId, 0, 0));
             _raftNode.Tell(requestVote);
 
             var secondResponse = _raftNode.Request(requesterId, () => new GetLastUpdatedTimestamp());
@@ -59,7 +59,7 @@ namespace Tests
             // The last updated timestamp should be relatively similar to the current time
             var timestamp = (DateTime) secondResponse.ResponseMessage;
             var timeDifference = timestamp - currentTime;
-            Assert.True(timeDifference.TotalMilliseconds >=0 && timeDifference <= TimeSpan.FromSeconds(5));
+            Assert.True(timeDifference.TotalMilliseconds >= 0 && timeDifference <= TimeSpan.FromSeconds(5));
         }
 
         [Fact]
@@ -119,7 +119,8 @@ namespace Tests
             Assert.True(lastUpdated.Equals(DateTime.MinValue));
 
             var currentTime = DateTime.UtcNow;
-            var appendEntries = new Request<AppendEntries>(requesterId, new AppendEntries(0, Guid.NewGuid(), 0, 0, new object[0], 0));
+            var appendEntries = new Request<AppendEntries>(requesterId,
+                new AppendEntries(0, Guid.NewGuid(), 0, 0, new object[0], 0));
             _raftNode.Tell(appendEntries);
 
             var secondResponse = _raftNode.Request(requesterId, () => new GetLastUpdatedTimestamp());
@@ -129,7 +130,7 @@ namespace Tests
             // The last updated timestamp should be relatively similar to the current time
             var timestamp = (DateTime) secondResponse.ResponseMessage;
             var timeDifference = timestamp - currentTime;
-            Assert.True(timeDifference.TotalMilliseconds >=0 && timeDifference <= TimeSpan.FromSeconds(5));
+            Assert.True(timeDifference.TotalMilliseconds >= 0 && timeDifference <= TimeSpan.FromSeconds(5));
         }
 
         [Fact]
@@ -268,7 +269,17 @@ namespace Tests
         [Fact]
         public void MustRejectVoteIfVoteRequestIsInvalid()
         {
-            throw new NotImplementedException("TODO: Implement MustRejectVoteIfVoteRequestIsInvalid");
+            // Reply false if term < currentTerm (§5.1)
+            var currentTerm = 42;   
+            _raftNode = new RaftNode(Guid.NewGuid(), delegate { }, currentTerm);
+            var response = _raftNode.Request(Guid.NewGuid(), () => new RequestVote(0, Guid.NewGuid(), 0, 0));
+
+            Assert.NotNull(response);
+            Assert.IsType<RequestVoteResult>(response.ResponseMessage);
+            
+            var result = (RequestVoteResult) response.ResponseMessage;
+            Assert.Equal(currentTerm, result.Term);
+            Assert.False(result.VoteGranted);
         }
     }
 }

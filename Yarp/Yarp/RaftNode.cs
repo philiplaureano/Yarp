@@ -63,17 +63,17 @@ namespace Yarp
         }
 
         private void Initialized(ConcurrentBag<Action<IContext>> handlers)
-        {                       
-            AddMessageHandler<Initialize>(HandleInitialize, handlers);            
+        {
+            AddMessageHandler<Initialize>(HandleInitialize, handlers);
         }
 
         private void AddCommonBehavior(ConcurrentBag<Action<IContext>> handlers)
         {
             void AddHandler<T>(Action<IContext, Request<T>> handleRequest)
             {
-                AddMessageHandler(handleRequest, handlers);    
+                AddMessageHandler(handleRequest, handlers);
             }
-            
+
             AddHandler<GetCurrentTerm>(HandleGetCurrentTermRequest);
             AddHandler<GetId>(HandleGetIdRequest);
             AddHandler<SetElectionTimeoutRange>(HandleSetElectionTimeoutRangeRequest);
@@ -81,27 +81,27 @@ namespace Yarp
             AddHandler<GetLastUpdatedTimestamp>(HandleGetLastUpdatedTimestamp);
             AddHandler<AppendEntries>(HandleAppendEntries);
         }
-        
+
         private void Follower(ConcurrentBag<Action<IContext>> handlers)
         {
             void AddHandler<T>(Action<IContext, Request<T>> handleRequest)
             {
-                AddMessageHandler(handleRequest, handlers);    
+                AddMessageHandler(handleRequest, handlers);
             }
-            
+
             // Reuse the initializer state handlers
             Initialized(handlers);
 
-            AddCommonBehavior(handlers);            
+            AddCommonBehavior(handlers);
             AddHandler<RequestVote>(HandleRequestVote);
-            
+
             AddMessageHandler<TimerTick>(HandleFollowerTimerTick, handlers);
         }
 
         private void Candidate(ConcurrentBag<Action<IContext>> handlers)
-        {                        
+        {
             AddCommonBehavior(handlers);
-        }       
+        }
 
         private void AddMessageHandler<TRequest>(Action<IContext, Request<TRequest>> messageHandler,
             ConcurrentBag<Action<IContext>> handlers)
@@ -190,11 +190,18 @@ namespace Yarp
 
         private void HandleRequestVote(IContext context, Request<RequestVote> request)
         {
-            // For now, assume that all vote requests are valid until the unit tests are available
-            // to verify the votes
-
+            // Reply false if term < currentTerm (§5.1)            
             if (request != null && request.RequestMessage != null)
-                _dateLastAppended = DateTime.UtcNow;
+            {
+                var currentTerm = _term;
+                var voteSuccessful = request?.RequestMessage.Term > currentTerm;
+
+                if (voteSuccessful)
+                    _dateLastAppended = DateTime.UtcNow;
+
+                context?.SendMessage(new Response<RequestVote>(request.RequesterId, _nodeId,
+                    new RequestVoteResult(currentTerm, voteSuccessful)));
+            }
         }
 
         private void HandleGetLastUpdatedTimestamp(IContext context, Request<GetLastUpdatedTimestamp> request)
