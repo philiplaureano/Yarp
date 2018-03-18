@@ -71,6 +71,7 @@ namespace Yarp
             AddMessageHandler<GetCurrentElectionTimeOutRange>(HandleGetCurrentElectionTimeOutRangeRequest, handlers);
             AddMessageHandler<GetLastUpdatedTimestamp>(HandleGetLastUpdatedTimestamp, handlers);
             AddMessageHandler<AppendEntries>(HandleAppendEntries, handlers);
+            AddMessageHandler<RequestVote>(HandleRequestVote, handlers);
         }
 
         private void Follower(ConcurrentBag<Action<IContext>> handlers)
@@ -88,6 +89,7 @@ namespace Yarp
             AddMessageHandler<SetElectionTimeoutRange>(HandleSetElectionTimeoutRangeRequest, handlers);
             AddMessageHandler<GetCurrentElectionTimeOutRange>(HandleGetCurrentElectionTimeOutRangeRequest, handlers);
             AddMessageHandler<GetLastUpdatedTimestamp>(HandleGetLastUpdatedTimestamp, handlers);
+            AddMessageHandler<AppendEntries>(HandleAppendEntries, handlers);
         }
 
         private void AddMessageHandler<TRequest>(Action<IContext, Request<TRequest>> messageHandler,
@@ -173,6 +175,15 @@ namespace Yarp
         {
             if (request != null && request.RequestMessage != null)
                 _dateLastAppended = DateTime.UtcNow;
+        }
+
+        private void HandleRequestVote(IContext context, Request<RequestVote> request)
+        {
+            // For now, assume that all vote requests are valid until the unit tests are available
+            // to verify the votes
+            
+            if (request != null && request.RequestMessage != null)
+                _dateLastAppended = DateTime.UtcNow;                        
         }
 
         private void HandleGetLastUpdatedTimestamp(IContext context, Request<GetLastUpdatedTimestamp> request)

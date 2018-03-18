@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices.ComTypes;
 using System.Threading;
 using Xunit;
 using Yarp;
@@ -25,6 +26,40 @@ namespace Tests
             _source?.Cancel();
             _source = null;
             _raftNode = null;
+        }
+
+        [Fact]
+        public void ShouldResetElectionTimerWhenVoteIsGrantedToCandidate()
+        {
+            // Route all the network output to the collection object
+            var nodeId = Guid.NewGuid();
+            var outbox = new ConcurrentBag<object>();
+            _raftNode = new RaftNode(nodeId, outbox.Add);
+
+            // The first response should be DateTime.Never
+            var requesterId = Guid.NewGuid();
+            var response = _raftNode.Request(requesterId, () => new GetLastUpdatedTimestamp());
+            Assert.NotNull(response);
+            Assert.IsType<DateTime>(response.ResponseMessage);
+
+            var lastUpdated = (DateTime) response.ResponseMessage;
+            Assert.True(lastUpdated.Equals(default(DateTime)));
+            Assert.True(lastUpdated.Equals(DateTime.MinValue));
+
+            var currentTime = DateTime.UtcNow;
+            var candidateId = Guid.NewGuid();
+
+            var requestVote = new Request<RequestVote>(requesterId, new RequestVote(42, candidateId, 0, 0));            
+            _raftNode.Tell(requestVote);
+
+            var secondResponse = _raftNode.Request(requesterId, () => new GetLastUpdatedTimestamp());
+            Assert.NotNull(secondResponse);
+            Assert.IsType<DateTime>(secondResponse.ResponseMessage);
+
+            // The last updated timestamp should be relatively similar to the current time
+            var timestamp = (DateTime) secondResponse.ResponseMessage;
+            var timeDifference = timestamp - currentTime;
+            Assert.True(timeDifference.TotalMilliseconds >=0 && timeDifference <= TimeSpan.FromSeconds(5));
         }
 
         [Fact]
@@ -90,7 +125,7 @@ namespace Tests
             Assert.True(lastUpdated.Equals(DateTime.MinValue));
 
             var currentTime = DateTime.UtcNow;
-            var appendEntries = new AppendEntries(0, Guid.NewGuid(), 0, 0, new object[0], 0);
+            var appendEntries = new Request<AppendEntries>(requesterId, new AppendEntries(0, Guid.NewGuid(), 0, 0, new object[0], 0));
             _raftNode.Tell(appendEntries);
 
             var secondResponse = _raftNode.Request(requesterId, () => new GetLastUpdatedTimestamp());
@@ -100,7 +135,7 @@ namespace Tests
             // The last updated timestamp should be relatively similar to the current time
             var timestamp = (DateTime) secondResponse.ResponseMessage;
             var timeDifference = timestamp - currentTime;
-            Assert.True(timeDifference <= TimeSpan.FromSeconds(5));
+            Assert.True(timeDifference.TotalMilliseconds >=0 && timeDifference <= TimeSpan.FromSeconds(5));
         }
 
         [Fact]
@@ -189,7 +224,7 @@ namespace Tests
         {
             var currentTerm = 42;
 
-            _raftNode = new RaftNode(Guid.NewGuid(), delegate {}, currentTerm);
+            _raftNode = new RaftNode(Guid.NewGuid(), delegate { }, currentTerm);
 
             // Queue the request
             var requesterId = Guid.NewGuid();
