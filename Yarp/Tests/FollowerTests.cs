@@ -106,12 +106,6 @@ namespace Tests
         }
 
         [Fact]
-        public void ShouldResetElectionTimerWhenAnAppendEntriesRPCHasBeenMade()
-        {
-            throw new NotImplementedException();
-        }
-
-        [Fact]
         public void ShouldBeAbleToGetLastTimestampOfLatestHeartbeat()
         {
             // The first response should be DateTime.Never
