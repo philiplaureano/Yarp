@@ -261,9 +261,18 @@ namespace Tests
 
         [Fact]
         public void MustVoteForCandidateIfCandidateTermIsHigherThanCurrentTerm()
-        {
-            throw new NotImplementedException(
-                "TODO: Implement MustVoteForCandidateIfCandidateTermIsHigherThanCurrentTerm");
+        {            
+            var currentTerm = 42;   
+            
+            _raftNode = new RaftNode(Guid.NewGuid(), delegate { }, currentTerm);
+            var response = _raftNode.Request(Guid.NewGuid(), () => new RequestVote(43, Guid.NewGuid(), 0, 0));
+
+            Assert.NotNull(response);
+            Assert.IsType<RequestVoteResult>(response.ResponseMessage);
+            
+            var result = (RequestVoteResult) response.ResponseMessage;
+            Assert.Equal(currentTerm, result.Term);
+            Assert.True(result.VoteGranted);            
         }
 
         [Fact]
