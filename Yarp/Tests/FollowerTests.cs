@@ -17,7 +17,7 @@ namespace Tests
         public FollowerTests()
         {
             _source = new CancellationTokenSource();
-            _raftNode = new RaftNode();
+            _raftNode = new RaftNode(delegate { });
         }
 
         public void Dispose()
@@ -30,7 +30,38 @@ namespace Tests
         [Fact]
         public void ShouldBroadcastRequestVoteIfElectionTimerExpires()
         {
-            throw new NotImplementedException("TODO: Implement ShouldRequestVoteIfElectionTimerExpires");
+            var minMilliseconds = 150;
+            var maxMilliseconds = 300;
+
+            var nodeId = Guid.NewGuid();
+            var term = 42;
+
+            var outbox = new ConcurrentBag<object>();
+            _raftNode = new RaftNode(nodeId, outbox.Add, term);
+
+            // Set the request timeout to be from 150-300ms
+            var requesterId = Guid.NewGuid();
+            _raftNode.Request(requesterId, () => new SetElectionTimeoutRange(minMilliseconds, maxMilliseconds));
+
+            // Start the node            
+            _raftNode.Tell(new Initialize());
+
+            // Let the timer expire
+            Thread.Sleep(500);
+
+            var voteRequests = outbox.Where(msg => msg is BroadcastMessage bm && bm.Message is RequestVote)
+                .Cast<BroadcastMessage>().ToArray();
+
+            Assert.NotEmpty(voteRequests);
+            Assert.True(voteRequests.Count() == 1);
+
+            var broadcastedMessage = voteRequests.First();
+            var voteRequest = (RequestVote) broadcastedMessage.Message;
+
+            Assert.Equal(nodeId, voteRequest.CandidateId);
+
+            // Note: The new candidate must increment the current vote by one
+            Assert.Equal(term + 1, voteRequest.Term);
         }
 
         [Fact]
@@ -76,7 +107,7 @@ namespace Tests
         public void ShouldBeAbleToGetFollowerIdWheneverIdIsRequested()
         {
             var nodeId = Guid.NewGuid();
-            _raftNode = new RaftNode(nodeId);
+            _raftNode = new RaftNode(nodeId, delegate { });
             var requesterId = Guid.NewGuid();
             Func<object> createMessageToSend = () => new Request<GetId>(requesterId, new GetId());
             Action<IEnumerable<object>> checkResults = outbox =>
@@ -158,7 +189,7 @@ namespace Tests
         {
             var currentTerm = 42;
 
-            _raftNode = new RaftNode(Guid.NewGuid(), currentTerm);
+            _raftNode = new RaftNode(Guid.NewGuid(), delegate {}, currentTerm);
 
             // Queue the request
             var requesterId = Guid.NewGuid();
