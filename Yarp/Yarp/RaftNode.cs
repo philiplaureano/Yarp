@@ -53,6 +53,7 @@ namespace Yarp
             _currentHeartbeatTimeout = TimeSpan.FromMilliseconds(heartbeatTimeoutInMilliseconds);
 
             Become(Follower);
+            _eventLogger(new RoleStateChanged(_nodeId, _term, DateTime.UtcNow, RoleState.NotYetInitialized, RoleState.Follower));
         }
 
         public Task TellAsync(IContext context)
@@ -249,6 +250,8 @@ namespace Yarp
             {
                 // Become a candidate node
                 Become(Candidate);
+                
+                _eventLogger(new RoleStateChanged(_nodeId, _term, DateTime.UtcNow, RoleState.Candidate, RoleState.Follower));
             }
         }
 

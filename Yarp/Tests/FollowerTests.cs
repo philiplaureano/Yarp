@@ -110,7 +110,25 @@ namespace Tests
         [Fact]
         public void ShouldEmitChangeEventsWhenChangingRoles()
         {
-            throw new NotImplementedException("TODO: Implement ShouldEmitChangeEventsWhenChangingRoles");
+            var nodeId = Guid.NewGuid();
+            var outbox = new ConcurrentBag<object>();
+            var eventLog = new ConcurrentBag<object>();
+            _raftNode = new RaftNode(nodeId, outbox.Add, eventLog.Add, () => new Guid[0]);
+
+            // Start the node and let it time out
+            _raftNode.Tell(new Initialize());
+            Thread.Sleep(500);
+
+            bool ShouldContainChangeEvent(object msg)
+            {
+                return msg is RoleStateChanged rsc &&
+                       rsc.ActorId == nodeId &&
+                       rsc.OldState == RoleState.Follower &&
+                       rsc.NewState == RoleState.Candidate;
+            }
+
+            Assert.NotEmpty(eventLog);
+            Assert.True(eventLog.Count(ShouldContainChangeEvent) > 0);
         }
 
         [Fact]
