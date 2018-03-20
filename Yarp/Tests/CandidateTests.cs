@@ -110,7 +110,7 @@ namespace Tests
         }
 
         [Fact]
-        public void ShouldCountReceivedVotesEvenIfElectionTimeoutOccurs()
+        public void ShouldStartNewElectionIfElectionTimeoutOccurs()
         {
             throw new NotImplementedException("TODO: Implement ShouldCountReceivedVotesEvenIfElectionTimeoutOccurs");
         }
@@ -119,6 +119,21 @@ namespace Tests
         public void ShouldSendHeartbeatMessagesAfterWinningElection()
         {
             throw new NotImplementedException("TODO: Implement ShouldSendHeartbeatMessagesAfterWinningElection");
+        }
+        [Fact]
+        public void ShouldRevertToFollowerAfterLosingAnElection()
+        {
+            throw new NotImplementedException("TODO: Implement ShouldRevertToFollowerAfterLosingAnElection");
+        }
+        [Fact]
+        public void ShouldRevertToFollowerUponReceivingHeartbeatFromALeaderWithAHigherTerm()
+        {   
+            throw new NotImplementedException("TODO: Implement ShouldRevertToFollowerUponReceivingHeartbeatFromALeaderWithAHigherTerm");
+        }
+        [Fact]
+        public void ShouldBecomeLeaderAfterWinningAnElection()
+        {
+            throw new NotImplementedException("TODO: Implement ShouldBecomeLeaderAfterWinningAnElection");
         }
     }
 }
