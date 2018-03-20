@@ -221,8 +221,9 @@ namespace Yarp
                 if (voteSuccessful)
                     _dateLastAppended = DateTime.UtcNow;
 
+                var candidateId = request.RequestMessage.CandidateId;
                 context?.SendMessage(new Response<RequestVote>(request.RequesterId, _nodeId,
-                    new RequestVoteResult(currentTerm, voteSuccessful)));
+                    new RequestVoteResult(currentTerm, voteSuccessful, _nodeId, candidateId)));
             }
         }
 
