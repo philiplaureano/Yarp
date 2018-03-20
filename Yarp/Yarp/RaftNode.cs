@@ -12,8 +12,11 @@ namespace Yarp
     {
         private ConcurrentBag<Action<IContext>> _handlers = new ConcurrentBag<Action<IContext>>();
 
-        private readonly int _term;
+        private ConcurrentDictionary<Guid, RequestVoteResult> _pendingVotes =
+            new ConcurrentDictionary<Guid, RequestVoteResult>();
+
         private readonly Guid _nodeId;
+        private int _term;
         private int _minMilliseconds;
         private int _maxMilliseconds;
         private TimeSpan _currentHeartbeatTimeout;
@@ -33,7 +36,7 @@ namespace Yarp
         {
         }
 
-        public RaftNode(Guid nodeId, Action<object> sendNetworkMessage, 
+        public RaftNode(Guid nodeId, Action<object> sendNetworkMessage,
             Func<IEnumerable<Guid>> getClusterActorIds,
             int term = 0, int heartbeatTimeoutInMilliseconds = 300)
         {
@@ -74,10 +77,8 @@ namespace Yarp
 
         private void AddCommonBehavior(ConcurrentBag<Action<IContext>> handlers)
         {
-            void AddHandler<T>(Action<IContext, Request<T>> handleRequest)
-            {
+            void AddHandler<T>(Action<IContext, Request<T>> handleRequest) =>
                 AddMessageHandler(handleRequest, handlers);
-            }
 
             // Unwrap targeted messages by default
             AddMessageHandler<TargetedMessage>(HandleTargetedMessage, handlers);
@@ -108,7 +109,53 @@ namespace Yarp
         private void Candidate(ConcurrentBag<Action<IContext>> handlers)
         {
             AddCommonBehavior(handlers);
+            AddMessageHandler<Response<RequestVote>>(HandleCandidateVoteResults, handlers);
         }
+
+        private void HandleCandidateVoteResults(IContext context, Response<RequestVote> response)
+        {
+            // Ignore results that don't match the current term
+            if (!(response.ResponseMessage is RequestVoteResult result))
+                return;
+
+            if (result.Term != _term)
+                return;
+
+            // Ignore duplicate votes
+            var voterId = result.VoterId;
+            if (!_pendingVotes.ContainsKey(voterId))
+                _pendingVotes[voterId] = result;
+
+            if (_pendingVotes.ContainsKey(voterId) && _pendingVotes[voterId] == null)
+                _pendingVotes[voterId] = result;
+
+            // The election is completed either when a majority of the votes come in, or
+            // an election timeout occurs
+            var quorumCount = _pendingVotes.Keys.Count() * .51;
+            if (_pendingVotes.Values.Count(item => item != null) >= quorumCount)
+            {
+                var votes = _pendingVotes?.Values.Where(v => v != null).ToArray();
+
+                var validVotes = votes.Where(v => v.Term == _term).ToArray();
+
+                var winnerId = Guid.Empty;
+                var candidateVotes = validVotes.GroupBy(v => v.CandidateId);
+                foreach (var votingGroup in candidateVotes)
+                {
+                    var candidateId = votingGroup.Key;
+                    var numberOfVotes = votingGroup.Count(v => v.VoteGranted);
+                    if (numberOfVotes >= quorumCount)
+                    {
+                        winnerId = candidateId;
+                        break;
+                    }
+                }
+
+                var outcome = new ElectionOutcome(winnerId, _term, _pendingVotes.Keys, votes);
+                _sendNetworkMessage(outcome);
+            }
+        }
+
 
         private void AddMessageHandler<TRequest>(Action<IContext, Request<TRequest>> messageHandler,
             ConcurrentBag<Action<IContext>> handlers)
@@ -145,15 +192,12 @@ namespace Yarp
         {
             if (_timer != null)
                 return;
-
             var frequency = TimeSpan.FromMilliseconds(10);
-
             _timer = new Timer(OnTimerCallback,
                 new TimerState(_nodeId, new object(),
                     context.SendMessage, DateTime.UtcNow, TimeSpan.Zero, frequency, context.Token),
                 Timeout.InfiniteTimeSpan,
                 Timeout.InfiniteTimeSpan);
-
             _timer.Change(TimeSpan.Zero, frequency);
         }
 
@@ -167,19 +211,23 @@ namespace Yarp
             // Ignore messages not targeted at this current actor
             if (targetedMessage?.TargetActorId != _nodeId)
                 return;
-            
+
             // Unwrap the message and process it
             this.Tell(targetedMessage.Message);
         }
-        
+
         private void HandleFollowerTimerTick(IContext context, TimerTick tick)
         {
             // Check if the heartbeat timeout has expired
             var timeElapsedSinceLastHeartBeat = DateTime.UtcNow - _dateLastAppended;
             if (timeElapsedSinceLastHeartBeat > _currentHeartbeatTimeout)
             {
+                // Become a candidate node
+                Become(Candidate);
+
                 // Increment the term and become a candidate
                 var newTerm = _term + 1;
+                _term = newTerm;
 
                 // Have the candidate vote for itself
                 _votedFor = _nodeId;
@@ -193,14 +241,17 @@ namespace Yarp
                 // Send the vote request to other actors
                 var otherActors = _getClusterActorIds().Where(id => id != _nodeId).ToArray();
 
+                // Reset the list of pending votes
+                _pendingVotes.Clear();
                 foreach (var actorId in otherActors)
                 {
-                    _sendNetworkMessage(new TargetedMessage(actorId,
-                        new RequestVote(newTerm, _nodeId, _lastLogIndex, _lastLogTerm)));   
-                }                                
-                
-                // Become a candidate node
-                Become(Candidate);
+                    if (_pendingVotes.ContainsKey(actorId))
+                        continue;
+
+                    _pendingVotes[actorId] = null;
+                    _sendNetworkMessage(new Request<RequestVote>(actorId,
+                        new RequestVote(newTerm, _nodeId, _lastLogIndex, _lastLogTerm)));
+                }
             }
         }
 
@@ -217,10 +268,8 @@ namespace Yarp
             {
                 var currentTerm = _term;
                 var voteSuccessful = request?.RequestMessage.Term > currentTerm;
-
                 if (voteSuccessful)
                     _dateLastAppended = DateTime.UtcNow;
-
                 var candidateId = request.RequestMessage.CandidateId;
                 context?.SendMessage(new Response<RequestVote>(request.RequesterId, _nodeId,
                     new RequestVoteResult(currentTerm, voteSuccessful, _nodeId, candidateId)));
@@ -239,7 +288,6 @@ namespace Yarp
         {
             var response = new CurrentElectionTimeOutRange(_nodeId, _minMilliseconds,
                 _maxMilliseconds);
-
             context?.SendMessage(
                 new Response<GetCurrentElectionTimeOutRange>(getTimeoutRequest1.RequesterId,
                     _nodeId, response));
@@ -251,10 +299,8 @@ namespace Yarp
             var setTimeoutMessage = setTimeoutRequest1.RequestMessage;
             _minMilliseconds = setTimeoutMessage.MinMilliseconds;
             _maxMilliseconds = setTimeoutMessage.MaxMilliseconds;
-
             var response = new CurrentElectionTimeOutRange(_nodeId, _minMilliseconds,
                 _maxMilliseconds);
-
             context?.SendMessage(
                 new Response<SetElectionTimeoutRange>(setTimeoutRequest1.RequesterId,
                     _nodeId, response));

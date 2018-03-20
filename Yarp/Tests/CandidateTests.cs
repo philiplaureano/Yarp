@@ -47,18 +47,16 @@ namespace Tests
             _raftNode.Tell(new Initialize());
             Thread.Sleep(500);
 
-            // The node should send vote requests to all the other actors
             foreach (var actorId in getOtherActors())
             {
                 // Verify the contents of every vote request sent out
                 // by the node
                 bool ShouldContainVoteRequest(object msg)
                 {
-                    if (msg is TargetedMessage targetedMessage &&
-                        targetedMessage.Message is Request<RequestVote> rrv &&
+                    if (msg is Request<RequestVote> rrv &&
                         rrv.RequestMessage is RequestVote requestVote)
                     {
-                        return targetedMessage.TargetActorId == actorId &&
+                        return rrv.RequesterId == actorId &&
                                requestVote.CandidateId == nodeId &&
                                requestVote.Term == newTerm;
                     }
@@ -66,16 +64,17 @@ namespace Tests
                     return false;
                 }
 
-                Assert.True(outbox.Count(ShouldContainVoteRequest) == 1);
+                Assert.True(outbox.Any(ShouldContainVoteRequest));
             }
 
             // Send the vote responses back to the node
             var source = new CancellationTokenSource();
             var token = source.Token;
-            var tasks = combinedVotes.Select(vote => _raftNode.TellAsync(new Context(vote, outbox.Add, token)));
+            var tasks = combinedVotes.Select(vote => _raftNode.TellAsync(new Context(vote, outbox.Add, token)))
+                .ToArray();
 
             // Wait until all vote responses have been sent back to the node
-            Task.WaitAll(tasks.ToArray());
+            Task.WaitAll(tasks);
 
             // The node should post an election outcome message
             var outcome = outbox.Where(msg => msg != null && msg is ElectionOutcome)
@@ -87,6 +86,8 @@ namespace Tests
             Assert.Subset(actorIds.ToHashSet(), outcome.KnownActors.ToHashSet());
 
             // Verify the votes
+            var quorumCount = actorIds.Length * .51;
+            var matchingVotes = 0;
             foreach (var vote in combinedVotes)
             {
                 Assert.IsType<RequestVoteResult>(vote.ResponseMessage);
@@ -101,8 +102,17 @@ namespace Tests
                            currentVote.VoterId == result.VoterId;
                 }
 
-                Assert.True(outcome.Votes.Count(HasMatchingVote) == 1);
+                matchingVotes += outcome.Votes.Count(HasMatchingVote);
             }
+            
+            // There should be a majority vote in favor of the candidate
+            Assert.True(matchingVotes >= quorumCount);
+        }
+
+        [Fact]
+        public void ShouldCountReceivedVotesEvenIfElectionTimeoutOccurs()
+        {
+            throw new NotImplementedException("TODO: Implement ShouldCountReceivedVotesEvenIfElectionTimeoutOccurs");
         }
 
         [Fact]
