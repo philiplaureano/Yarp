@@ -34,7 +34,8 @@ namespace Tests
             // Route all the network output to the collection object
             var nodeId = Guid.NewGuid();
             var outbox = new ConcurrentBag<object>();
-            _raftNode = new RaftNode(nodeId, outbox.Add, ()=>new Guid[0]);
+            var eventLog = new ConcurrentBag<object>();
+            _raftNode = new RaftNode(nodeId, outbox.Add, eventLog.Add, () => new Guid[0]);
 
             // The first response should be DateTime.Never
             var requesterId = Guid.NewGuid();
@@ -76,7 +77,8 @@ namespace Tests
                 .Select(_ => Guid.NewGuid()).ToArray();
 
             var outbox = new ConcurrentBag<object>();
-            _raftNode = new RaftNode(nodeId, outbox.Add, () => actorIds, term);
+            var eventLog = new ConcurrentBag<object>();
+            _raftNode = new RaftNode(nodeId, outbox.Add, eventLog.Add, () => actorIds, term);
 
             // Set the request timeout to be from 150-300ms
             var requesterId = Guid.NewGuid();
@@ -93,16 +95,16 @@ namespace Tests
 
             Assert.NotEmpty(voteRequests);
             Assert.True(voteRequests.Count() == numberOfActorsInCluster);
-            
+
             for (var i = 0; i < numberOfActorsInCluster; i++)
-            {                
-                var targetedMessage = voteRequests[i];                
+            {
+                var targetedMessage = voteRequests[i];
                 var voteRequest = (RequestVote) targetedMessage.Message;
                 Assert.Equal(nodeId, voteRequest.CandidateId);
 
                 // Note: The new candidate must increment the current vote by one
                 Assert.Equal(term + 1, voteRequest.Term);
-            }           
+            }
         }
 
         [Fact]
@@ -143,7 +145,7 @@ namespace Tests
         public void ShouldBeAbleToGetFollowerIdWheneverIdIsRequested()
         {
             var nodeId = Guid.NewGuid();
-            _raftNode = new RaftNode(nodeId, delegate { }, ()=>new Guid[0]);
+            _raftNode = new RaftNode(nodeId, delegate { }, delegate { }, () => new Guid[0]);
             var requesterId = Guid.NewGuid();
             Func<object> createMessageToSend = () => new Request<GetId>(requesterId, new GetId());
             Action<IEnumerable<object>> checkResults = outbox =>
@@ -225,7 +227,7 @@ namespace Tests
         {
             var currentTerm = 42;
 
-            _raftNode = new RaftNode(Guid.NewGuid(), delegate { }, ()=>new Guid[0], currentTerm);
+            _raftNode = new RaftNode(Guid.NewGuid(), delegate { }, delegate { }, () => new Guid[0], currentTerm);
 
             // Queue the request
             var requesterId = Guid.NewGuid();
@@ -270,7 +272,7 @@ namespace Tests
         {
             var currentTerm = 42;
 
-            _raftNode = new RaftNode(Guid.NewGuid(), delegate { }, ()=>new Guid[0], currentTerm);
+            _raftNode = new RaftNode(Guid.NewGuid(), delegate { }, delegate { }, () => new Guid[0], currentTerm);
             var response = _raftNode.Request(Guid.NewGuid(), () => new RequestVote(43, Guid.NewGuid(), 0, 0));
 
             Assert.NotNull(response);
@@ -286,7 +288,7 @@ namespace Tests
         {
             // Reply false if term < currentTerm (§5.1)
             var currentTerm = 42;
-            _raftNode = new RaftNode(Guid.NewGuid(), delegate { }, ()=>new Guid[0], currentTerm);
+            _raftNode = new RaftNode(Guid.NewGuid(), delegate { }, delegate { }, () => new Guid[0], currentTerm);
             var response = _raftNode.Request(Guid.NewGuid(), () => new RequestVote(0, Guid.NewGuid(), 0, 0));
 
             Assert.NotNull(response);

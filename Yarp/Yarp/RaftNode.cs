@@ -10,6 +10,7 @@ namespace Yarp
 {
     public class RaftNode : IActor
     {
+        private readonly Action<object> _eventLogger;
         private ConcurrentBag<Action<IContext>> _handlers = new ConcurrentBag<Action<IContext>>();
 
         private ConcurrentDictionary<Guid, RequestVoteResult> _pendingVotes =
@@ -35,16 +36,17 @@ namespace Yarp
         private double _quorumPercentage = .51;
         private DateTime _electionStartTime = DateTime.MinValue;
 
-        public RaftNode(Action<object> sendNetworkMessage) : this(Guid.NewGuid(), sendNetworkMessage, () => new Guid[0])
+        public RaftNode(Action<object> sendNetworkMessage) : this(Guid.NewGuid(), sendNetworkMessage, delegate {  },  () => new Guid[0])
         {
         }
 
-        public RaftNode(Guid nodeId, Action<object> sendNetworkMessage,
+        public RaftNode(Guid nodeId, Action<object> sendNetworkMessage, Action<object> eventLogger,
             Func<IEnumerable<Guid>> getClusterActorIds,
             int term = 0, int heartbeatTimeoutInMilliseconds = 300, int electionTimeoutInMilliseconds = 1000)
         {
             _nodeId = nodeId;
             _sendNetworkMessage = sendNetworkMessage;
+            _eventLogger = eventLogger;
             _getClusterActorIds = getClusterActorIds;
             _term = term;
             _currentElectionTimeout = TimeSpan.FromMilliseconds(electionTimeoutInMilliseconds);
@@ -175,7 +177,7 @@ namespace Yarp
                 }
 
                 var outcome = new ElectionOutcome(winnerId, _term, _pendingVotes.Keys, votes);
-                _sendNetworkMessage(outcome);
+                _eventLogger(outcome);
             }
         }
 

@@ -24,8 +24,9 @@ namespace Tests
             Func<IEnumerable<Guid>> getOtherActors = () => actorIds;
 
             var outbox = new ConcurrentBag<object>();
+            var eventLog = new ConcurrentBag<object>();
             var nodeId = Guid.NewGuid();
-            _raftNode = new RaftNode(nodeId, outbox.Add, getOtherActors);
+            _raftNode = new RaftNode(nodeId, outbox.Add, eventLog.Add, getOtherActors);
 
             var numberOfSuccessfulVotes = 4;
             var numberOfFailedVotes = 3;
@@ -77,7 +78,9 @@ namespace Tests
             Task.WaitAll(tasks);
 
             // The node should post an election outcome message
-            var outcome = outbox.Where(msg => msg != null && msg is ElectionOutcome)
+            Assert.NotEmpty(eventLog);
+            
+            var outcome = eventLog.Where(msg => msg != null && msg is ElectionOutcome)
                 .Cast<ElectionOutcome>()
                 .First();
 
@@ -122,8 +125,10 @@ namespace Tests
 
             var initialTerm = 0;
             var outbox = new ConcurrentBag<object>();
+            var eventLog = new ConcurrentBag<object>();
             var nodeId = Guid.NewGuid();
-            _raftNode = new RaftNode(nodeId, outbox.Add, getOtherActors, initialTerm, electionTimeoutInMilliseconds);
+            _raftNode = new RaftNode(nodeId, outbox.Add, eventLog.Add, getOtherActors, initialTerm,
+                electionTimeoutInMilliseconds);
 
             // Start the node and let it timeout to trigger an election
             _raftNode.Tell(new Initialize());
