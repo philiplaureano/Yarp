@@ -45,7 +45,7 @@ namespace Tests
             // Start the node and let the election timeout expire
             // in order to trigger a new election
             _raftNode.Tell(new Initialize());
-            Thread.Sleep(500);
+            Thread.Sleep(200);
 
             foreach (var actorId in getOtherActors())
             {
@@ -64,7 +64,7 @@ namespace Tests
                     return false;
                 }
 
-                Assert.True(outbox.Any(ShouldContainVoteRequest));
+                Assert.True(outbox.Count(ShouldContainVoteRequest) > 0);
             }
 
             // Send the vote responses back to the node
@@ -104,7 +104,7 @@ namespace Tests
 
                 matchingVotes += outcome.Votes.Count(HasMatchingVote);
             }
-            
+
             // There should be a majority vote in favor of the candidate
             Assert.True(matchingVotes >= quorumCount);
         }
@@ -112,7 +112,36 @@ namespace Tests
         [Fact]
         public void ShouldStartNewElectionIfElectionTimeoutOccurs()
         {
-            throw new NotImplementedException("TODO: Implement ShouldCountReceivedVotesEvenIfElectionTimeoutOccurs");
+            var numberOfOtherActors = 3;
+            var actorIds = Enumerable.Range(0, numberOfOtherActors)
+                .Select(_ => Guid.NewGuid()).ToArray();
+
+            Func<IEnumerable<Guid>> getOtherActors = () => actorIds;
+
+            var electionTimeoutInMilliseconds = 1000;
+
+            var initialTerm = 0;
+            var outbox = new ConcurrentBag<object>();
+            var nodeId = Guid.NewGuid();
+            _raftNode = new RaftNode(nodeId, outbox.Add, getOtherActors, initialTerm, electionTimeoutInMilliseconds);
+
+            // Start the node and let it timeout to trigger an election
+            _raftNode.Tell(new Initialize());
+            Thread.Sleep(200);
+
+            // Verify that the vote requests have been sent
+            Assert.True(
+                outbox.Count(msg => msg is Request<RequestVote> rv && rv.RequestMessage.Term == initialTerm + 1) ==
+                numberOfOtherActors);
+
+            // Avoid sending any votes so that the election has to restart
+            Thread.Sleep(electionTimeoutInMilliseconds);
+
+            // If another round of Request<RequestVote> messages goes out, it means
+            // that the node has restarted the election
+            Assert.True(
+                outbox.Count(msg => msg is Request<RequestVote> rv && rv.RequestMessage.Term == initialTerm + 2) ==
+                numberOfOtherActors);
         }
 
         [Fact]
@@ -120,16 +149,20 @@ namespace Tests
         {
             throw new NotImplementedException("TODO: Implement ShouldSendHeartbeatMessagesAfterWinningElection");
         }
+
         [Fact]
         public void ShouldRevertToFollowerAfterLosingAnElection()
         {
             throw new NotImplementedException("TODO: Implement ShouldRevertToFollowerAfterLosingAnElection");
         }
+
         [Fact]
         public void ShouldRevertToFollowerUponReceivingHeartbeatFromALeaderWithAHigherTerm()
-        {   
-            throw new NotImplementedException("TODO: Implement ShouldRevertToFollowerUponReceivingHeartbeatFromALeaderWithAHigherTerm");
+        {
+            throw new NotImplementedException(
+                "TODO: Implement ShouldRevertToFollowerUponReceivingHeartbeatFromALeaderWithAHigherTerm");
         }
+
         [Fact]
         public void ShouldBecomeLeaderAfterWinningAnElection()
         {

@@ -20,6 +20,7 @@ namespace Yarp
         private int _minMilliseconds;
         private int _maxMilliseconds;
         private TimeSpan _currentHeartbeatTimeout;
+        private TimeSpan _currentElectionTimeout;
         private DateTime _dateLastAppended = DateTime.MinValue;
 
         private readonly Action<object> _sendNetworkMessage;
@@ -31,6 +32,8 @@ namespace Yarp
         private readonly object _synclock = new object();
         private int _lastLogIndex;
         private int _lastLogTerm;
+        private double _quorumPercentage = .51;
+        private DateTime _electionStartTime = DateTime.MinValue;
 
         public RaftNode(Action<object> sendNetworkMessage) : this(Guid.NewGuid(), sendNetworkMessage, () => new Guid[0])
         {
@@ -38,12 +41,13 @@ namespace Yarp
 
         public RaftNode(Guid nodeId, Action<object> sendNetworkMessage,
             Func<IEnumerable<Guid>> getClusterActorIds,
-            int term = 0, int heartbeatTimeoutInMilliseconds = 300)
+            int term = 0, int heartbeatTimeoutInMilliseconds = 300, int electionTimeoutInMilliseconds = 1000)
         {
             _nodeId = nodeId;
             _sendNetworkMessage = sendNetworkMessage;
             _getClusterActorIds = getClusterActorIds;
             _term = term;
+            _currentElectionTimeout = TimeSpan.FromMilliseconds(electionTimeoutInMilliseconds);
             _currentHeartbeatTimeout = TimeSpan.FromMilliseconds(heartbeatTimeoutInMilliseconds);
 
             Become(Follower);
@@ -108,8 +112,27 @@ namespace Yarp
 
         private void Candidate(ConcurrentBag<Action<IContext>> handlers)
         {
+            // Reset the election timer
+            _electionStartTime = DateTime.UtcNow;
+
+            // Increment the term 
+            var newTerm = _term + 1;
+            StartElection(newTerm);
+
             AddCommonBehavior(handlers);
             AddMessageHandler<Response<RequestVote>>(HandleCandidateVoteResults, handlers);
+            AddMessageHandler<TimerTick>(HandleCandidateTimerTick, handlers);
+        }
+
+        private void HandleCandidateTimerTick(IContext context, TimerTick tick)
+        {
+            var currentTime = DateTime.UtcNow;
+            var timeElapsed = currentTime - _electionStartTime;
+            if (timeElapsed > _currentElectionTimeout)
+            {
+                Become(Candidate);
+                return;
+            }
         }
 
         private void HandleCandidateVoteResults(IContext context, Response<RequestVote> response)
@@ -131,7 +154,7 @@ namespace Yarp
 
             // The election is completed either when a majority of the votes come in, or
             // an election timeout occurs
-            var quorumCount = _pendingVotes.Keys.Count() * .51;
+            var quorumCount = _pendingVotes.Keys.Count() * _quorumPercentage;
             if (_pendingVotes.Values.Count(item => item != null) >= quorumCount)
             {
                 var votes = _pendingVotes?.Values.Where(v => v != null).ToArray();
@@ -224,34 +247,35 @@ namespace Yarp
             {
                 // Become a candidate node
                 Become(Candidate);
+            }
+        }
 
-                // Increment the term and become a candidate
-                var newTerm = _term + 1;
-                _term = newTerm;
+        private void StartElection(int newTerm)
+        {
+            _term = newTerm;
 
-                // Have the candidate vote for itself
-                _votedFor = _nodeId;
+            // Have the candidate vote for itself
+            _votedFor = _nodeId;
 
-                // Reset the election timer
-                var random = new Random();
-                var nextTimeoutInMilliseconds = random.Next(_minMilliseconds, _maxMilliseconds);
-                _currentHeartbeatTimeout = TimeSpan.FromMilliseconds(nextTimeoutInMilliseconds);
-                _dateLastAppended = DateTime.UtcNow;
+            // Reset the election timer
+            var random = new Random();
+            var nextTimeoutInMilliseconds = random.Next(_minMilliseconds, _maxMilliseconds);
+            _currentHeartbeatTimeout = TimeSpan.FromMilliseconds(nextTimeoutInMilliseconds);
+            _dateLastAppended = DateTime.UtcNow;
 
-                // Send the vote request to other actors
-                var otherActors = _getClusterActorIds().Where(id => id != _nodeId).ToArray();
+            // Send the vote request to other actors
+            var otherActors = _getClusterActorIds().Where(id => id != _nodeId).ToArray();
 
-                // Reset the list of pending votes
-                _pendingVotes.Clear();
-                foreach (var actorId in otherActors)
-                {
-                    if (_pendingVotes.ContainsKey(actorId))
-                        continue;
+            // Reset the list of pending votes
+            _pendingVotes.Clear();
+            foreach (var actorId in otherActors)
+            {
+                if (_pendingVotes.ContainsKey(actorId))
+                    continue;
 
-                    _pendingVotes[actorId] = null;
-                    _sendNetworkMessage(new Request<RequestVote>(actorId,
-                        new RequestVote(newTerm, _nodeId, _lastLogIndex, _lastLogTerm)));
-                }
+                _pendingVotes[actorId] = null;
+                _sendNetworkMessage(new Request<RequestVote>(actorId,
+                    new RequestVote(newTerm, _nodeId, _lastLogIndex, _lastLogTerm)));
             }
         }
 
