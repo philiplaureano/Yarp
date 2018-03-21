@@ -36,7 +36,8 @@ namespace Yarp
         private double _quorumPercentage = .51;
         private DateTime _electionStartTime = DateTime.MinValue;
 
-        public RaftNode(Action<object> sendNetworkMessage) : this(Guid.NewGuid(), sendNetworkMessage, delegate {  },  () => new Guid[0])
+        public RaftNode(Action<object> sendNetworkMessage) : this(Guid.NewGuid(), sendNetworkMessage, delegate { },
+            () => new Guid[0])
         {
         }
 
@@ -53,7 +54,8 @@ namespace Yarp
             _currentHeartbeatTimeout = TimeSpan.FromMilliseconds(heartbeatTimeoutInMilliseconds);
 
             Become(Follower);
-            _eventLogger(new RoleStateChanged(_nodeId, _term, DateTime.UtcNow, RoleState.NotYetInitialized, RoleState.Follower));
+            LogEvent(new RoleStateChanged(_nodeId, _term, DateTime.UtcNow, RoleState.Follower,
+                RoleState.NotYetInitialized));
         }
 
         public Task TellAsync(IContext context)
@@ -158,30 +160,29 @@ namespace Yarp
             // The election is completed either when a majority of the votes come in, or
             // an election timeout occurs
             var quorumCount = _pendingVotes.Keys.Count() * _quorumPercentage;
-            if (_pendingVotes.Values.Count(item => item != null) >= quorumCount)
+            if (!(_pendingVotes.Values.Count(item => item != null) >= quorumCount))
+                return;
+
+            var votes = _pendingVotes?.Values.Where(v => v != null).ToArray();
+
+            var validVotes = votes.Where(v => v.Term == _term).ToArray();
+
+            var winnerId = Guid.Empty;
+            var candidateVotes = validVotes.GroupBy(v => v.CandidateId);
+            foreach (var votingGroup in candidateVotes)
             {
-                var votes = _pendingVotes?.Values.Where(v => v != null).ToArray();
-
-                var validVotes = votes.Where(v => v.Term == _term).ToArray();
-
-                var winnerId = Guid.Empty;
-                var candidateVotes = validVotes.GroupBy(v => v.CandidateId);
-                foreach (var votingGroup in candidateVotes)
+                var candidateId = votingGroup.Key;
+                var numberOfVotes = votingGroup.Count(v => v.VoteGranted);
+                if (numberOfVotes >= quorumCount)
                 {
-                    var candidateId = votingGroup.Key;
-                    var numberOfVotes = votingGroup.Count(v => v.VoteGranted);
-                    if (numberOfVotes >= quorumCount)
-                    {
-                        winnerId = candidateId;
-                        break;
-                    }
+                    winnerId = candidateId;
+                    break;
                 }
-
-                var outcome = new ElectionOutcome(winnerId, _term, _pendingVotes.Keys, votes);
-                Task.Run(()=>_eventLogger(outcome));
             }
-        }
 
+            var outcome = new ElectionOutcome(winnerId, _term, _pendingVotes.Keys, votes);
+            LogEvent(outcome);
+        }
 
         private void AddMessageHandler<TRequest>(Action<IContext, Request<TRequest>> messageHandler,
             ConcurrentBag<Action<IContext>> handlers)
@@ -202,7 +203,6 @@ namespace Yarp
 
             handlers.Add(handler);
         }
-
 
         private Action<IContext> CreateContextHandler<TRequest>(Action<IContext, Request<TRequest>> handler)
         {
@@ -250,9 +250,15 @@ namespace Yarp
             {
                 // Become a candidate node
                 Become(Candidate);
-                
-                _eventLogger(new RoleStateChanged(_nodeId, _term, DateTime.UtcNow, RoleState.Candidate, RoleState.Follower));
+
+                LogEvent(new RoleStateChanged(_nodeId, _term, DateTime.UtcNow, RoleState.Candidate,
+                    RoleState.Follower));
             }
+        }
+
+        private void LogEvent(object eventMessage)
+        {
+            Task.Run(() => _eventLogger?.Invoke(eventMessage));
         }
 
         private void StartElection(int newTerm)

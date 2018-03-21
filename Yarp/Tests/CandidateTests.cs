@@ -17,7 +17,7 @@ namespace Tests
         [Fact]
         public void ShouldWinElectionIfMajorityOfVotesReceived()
         {
-            var numberOfOtherActors = 7;
+            var numberOfOtherActors = 9;
             var actorIds = Enumerable.Range(0, numberOfOtherActors)
                 .Select(_ => Guid.NewGuid()).ToArray();
 
@@ -28,14 +28,14 @@ namespace Tests
             var nodeId = Guid.NewGuid();
             _raftNode = new RaftNode(nodeId, outbox.Add, eventLog.Add, getOtherActors);
 
-            var numberOfSuccessfulVotes = 4;
-            var numberOfFailedVotes = 3;
+            var numberOfSuccessfulVotes = 5;
+            var numberOfFailedVotes = 4;
 
             IEnumerable<Response<RequestVote>> CreateVotes(int term, bool result, int numberOfVotes) =>
                 Enumerable.Range(0, numberOfVotes).Select(index => new Response<RequestVote>(nodeId,
                     actorIds[index], new RequestVoteResult(term, result, actorIds[index], nodeId)));
 
-            // Create an election where 4 out of 7 votes are in favor of the
+            // Create an election where 5 out of 9 votes are in favor of the
             // candidate node
             var newTerm = 1;
             var successfulVotes = CreateVotes(newTerm, true, numberOfSuccessfulVotes);
