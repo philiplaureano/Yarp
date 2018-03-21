@@ -178,7 +178,7 @@ namespace Yarp
                 }
 
                 var outcome = new ElectionOutcome(winnerId, _term, _pendingVotes.Keys, votes);
-                _eventLogger(outcome);
+                Task.Run(()=>_eventLogger(outcome));
             }
         }
 

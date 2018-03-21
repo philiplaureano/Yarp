@@ -88,18 +88,18 @@ namespace Tests
             _raftNode.Tell(new Initialize());
 
             // Let the timer expire
-            Thread.Sleep(500);
+            Thread.Sleep(1000);
 
-            var voteRequests = outbox.Where(msg => msg is TargetedMessage tm && tm.Message is RequestVote)
-                .Cast<TargetedMessage>().ToArray();
+            var voteRequests = outbox.Where(msg => msg is Request<RequestVote> rv && rv.RequestMessage is RequestVote)
+                .Cast<Request<RequestVote>>().ToArray();
 
             Assert.NotEmpty(voteRequests);
             Assert.True(voteRequests.Count() == numberOfActorsInCluster);
 
             for (var i = 0; i < numberOfActorsInCluster; i++)
             {
-                var targetedMessage = voteRequests[i];
-                var voteRequest = (RequestVote) targetedMessage.Message;
+                var request = voteRequests[i];
+                var voteRequest = request.RequestMessage;
                 Assert.Equal(nodeId, voteRequest.CandidateId);
 
                 // Note: The new candidate must increment the current vote by one
