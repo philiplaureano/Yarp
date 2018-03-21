@@ -263,22 +263,6 @@ namespace Tests
             RunTest(createMessageToSend, CheckResults);
         }
 
-        private void RunTest(Func<object> createMessageToSend,
-            Action<IEnumerable<object>> checkResults)
-        {
-            // Collect the results in the outbox
-            var outbox = new ConcurrentBag<object>();
-            Action<object> outboxHandler = msg => { outbox.Add(msg); };
-
-            var token = _source.Token;
-            var sendMessage = _raftNode.CreateSenderMethod(outboxHandler, token);
-            sendMessage(createMessageToSend());
-
-            Thread.Sleep(500);
-
-            checkResults(outbox);
-        }
-
         [Fact]
         public void MustSwitchToCandidateWhenElectionTimeoutOccurs()
         {
@@ -315,6 +299,22 @@ namespace Tests
             var result = (RequestVoteResult) response.ResponseMessage;
             Assert.Equal(currentTerm, result.Term);
             Assert.False(result.VoteGranted);
+        }
+
+        private void RunTest(Func<object> createMessageToSend,
+            Action<IEnumerable<object>> checkResults)
+        {
+            // Collect the results in the outbox
+            var outbox = new ConcurrentBag<object>();
+            Action<object> outboxHandler = msg => { outbox.Add(msg); };
+
+            var token = _source.Token;
+            var sendMessage = _raftNode.CreateSenderMethod(outboxHandler, token);
+            sendMessage(createMessageToSend());
+
+            Thread.Sleep(500);
+
+            checkResults(outbox);
         }
     }
 }
