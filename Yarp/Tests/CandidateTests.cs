@@ -10,37 +10,6 @@ using Yarp.Messages;
 
 namespace Tests
 {
-    public static class CollectionTestExtensions
-    {
-        public static IEnumerable<TOutput> FilterCast<TOutput>(this IEnumerable<object> items)
-        {
-            return items.Where(item => item is TOutput).Cast<TOutput>();
-        }
-
-        public static void BlockUntilAll<T>(this IEnumerable<T> items, Func<T, bool> condition)
-        {
-            var currentItems = items.ToArray();
-            while (!currentItems.All(condition))
-            {
-                /* Block the thread */
-            }
-        }
-
-        public static void BlockUntilAny<T>(this IEnumerable<T> items, Func<T, bool> condition)
-        {
-            var currentItems = items.ToArray();
-            while (!currentItems.Any(condition))
-            {
-                /* Block the thread */
-            }
-        }
-
-        public static void ShouldHaveAtLeastOne<T>(this IEnumerable<T> items, Func<T, bool> condition)
-        {
-            Assert.True(items.Count(item => condition(item)) > 0);
-        }
-    }
-
     public class CandidateTests
     {
         private RaftNode _raftNode;
@@ -253,7 +222,7 @@ namespace Tests
                 msg is Response<AppendEntries> response && response.ResponseMessage is AppendEntriesResult ae &&
                 ae.Term == 42);
 
-            var result = outbox.FilterCast<Response<AppendEntries>>().First();
+            var result = outbox.CastAs<Response<AppendEntries>>().First();
             Assert.IsType<AppendEntriesResult>(result.ResponseMessage);
 
             var responseMessage = (AppendEntriesResult) result.ResponseMessage;
