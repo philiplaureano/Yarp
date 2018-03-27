@@ -20,6 +20,10 @@ namespace Yarp.Messages
         public int PreviousLogIndex { get; }
         public int PreviousLogTerm { get; }
         public object[] Entries { get; }
+        
+        /// <summary>
+        /// This is the highest index that the leader knows to be committed in its log.
+        /// </summary>
         public int LeaderCommitIndex { get; }
     }
 }

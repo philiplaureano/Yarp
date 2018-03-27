@@ -26,11 +26,14 @@ namespace Yarp
 
         private readonly Action<object> _sendNetworkMessage;
         private readonly Func<IEnumerable<Guid>> _getClusterActorIds;
+        private readonly object _synclock = new object();
+        private readonly object _logLock = new object();
+        private readonly List<(int, object)> _logEntries = new List<(int, object)>();
+
         private Timer _timer;
 
         private Guid _votedFor = Guid.Empty;
 
-        private readonly object _synclock = new object();
         private int _lastLogIndex;
         private int _lastLogTerm;
         private double _quorumPercentage = .51;
@@ -292,8 +295,36 @@ namespace Yarp
 
         private void HandleAppendEntries(IContext context, Request<AppendEntries> request)
         {
-            if (request != null && request.RequestMessage != null)
-                _dateLastAppended = DateTime.UtcNow;
+            if (request?.RequestMessage == null)
+                return;
+
+            _dateLastAppended = DateTime.UtcNow;
+
+            var requesterId = request.RequesterId;
+            var appendEntries = request.RequestMessage;
+
+            // Convert to a follower if the other term is higher
+            if (_term < appendEntries.Term)
+            {
+                Become(Follower);
+                _term = appendEntries.Term;
+            }            
+            
+            _lastLogTerm = appendEntries.Term;
+
+            // Update the log entries
+            var entries = appendEntries.Entries ?? new object[0];
+            foreach (var entry in entries)
+            {
+                _logEntries.Add((appendEntries.Term, entry));
+            }
+
+            // Set the last log index
+            var newIndexOffset = entries.Length;
+            _lastLogIndex += newIndexOffset;
+                
+            context?.SendMessage(new Response<AppendEntries>(requesterId, _nodeId,
+                new AppendEntriesResult(_term, true)));
         }
 
         private void HandleRequestVote(IContext context, Request<RequestVote> request)

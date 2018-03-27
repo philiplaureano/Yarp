@@ -301,6 +301,58 @@ namespace Tests
             Assert.False(result.VoteGranted);
         }
 
+        [Fact]
+        public void ShouldAcceptAppendEntriesOnFirstRequest()
+        {
+            var numberOfOtherActors = 3;
+            var otherActors = Enumerable.Range(0, numberOfOtherActors).Select(_ => Guid.NewGuid());
+            var outbox = new ConcurrentBag<object>();
+            var eventLog = new ConcurrentBag<object>();
+            var startingTerm = 0;
+
+            var leaderId = Guid.NewGuid();
+            var nodeId = Guid.NewGuid();
+            _raftNode = new RaftNode(nodeId, outbox.Add, eventLog.Add, () => otherActors, startingTerm);
+            _raftNode.Tell(new Initialize());
+
+            var term = 42;
+            var response = _raftNode.Request(nodeId,
+                () => new AppendEntries(term, leaderId, 0, 0, new object[] {"Hello, World"}, 1));
+
+            // The response must be valid
+            Assert.NotEqual(Response<AppendEntries>.Empty, response);
+            Assert.IsType<AppendEntriesResult>(response.ResponseMessage);
+
+            // The first entry must be successful since there are no prior entries
+            var firstResult = (AppendEntriesResult) response.ResponseMessage;
+            Assert.True(firstResult.Success);
+            Assert.Equal(term, firstResult.Term);
+        }
+
+        [Fact]
+        public void ShouldRejectAppendEntriesIfFollowerCannotFindAMatchForAnEntryInItsOwnLog()
+        {
+            /* When sending an AppendEntries RPC,
+             * the leader includes the term number and index of the entry
+             * that immediately precedes the new entry.
+             *
+             * If the follower cannot find a match for this entry in its own log,
+             * it rejects the request to append the new entry.
+             */
+            var nodeId = Guid.NewGuid();
+
+            var numberOfOtherActors = 3;
+            var otherActors = Enumerable.Range(0, numberOfOtherActors).Select(_ => Guid.NewGuid());
+            var outbox = new ConcurrentBag<object>();
+            var eventLog = new ConcurrentBag<object>();
+            var startingTerm = 0;
+            _raftNode = new RaftNode(nodeId, outbox.Add, eventLog.Add, () => otherActors, startingTerm);
+
+            // Reply false if log doesn’t contain an entry at prevLogIndex whose term matches prevLogTerm (§5.3)
+            throw new NotImplementedException(
+                "TODO: Implement ShouldRejectAppendEntriesIfFollowerCannotFindAMatchForAnEntryInItsOwnLog");
+        }
+
         private void RunTest(Func<object> createMessageToSend,
             Action<IEnumerable<object>> checkResults)
         {
