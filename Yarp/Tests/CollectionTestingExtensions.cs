@@ -12,22 +12,57 @@ namespace Tests
             return items.Where(item => item is TOutput).Cast<TOutput>();
         }
 
-        public static void BlockUntilAll<T>(this IEnumerable<T> items, Func<T, bool> condition)
+        public static void BlockUntilAny<T>(this IEnumerable<T> items, Func<T, bool> condition, TimeSpan timeout)
         {
-            var currentItems = items.ToArray();
-            while (!currentItems.All(condition))
+            items.BlockUntilAny(condition, delegate { }, timeout);
+        }
+
+        public static void BlockUntilAny<T>(this IEnumerable<T> items, Func<T, bool> condition, Action timeoutHandler,
+            TimeSpan timeout)
+        {
+            var timeStarted = DateTime.UtcNow;
+
+            // Add a timeout to the existing condition
+            bool ModifiedCondition(T item)
             {
-                /* Block the thread */
+                var timeElapsed = DateTime.UtcNow - timeStarted;
+                var hasTimeExpired = timeElapsed > timeout;
+                if (hasTimeExpired)
+                {
+                    // Call the handler if the timeout occurs
+                    timeoutHandler();
+                    return false;
+                }
+
+                return condition(item);
             }
+
+            items.BlockUntilAny(ModifiedCondition);
         }
 
         public static void BlockUntilAny<T>(this IEnumerable<T> items, Func<T, bool> condition)
         {
-            var currentItems = items.ToArray();
-            while (!currentItems.Any(condition))
+            var blockUntilAny = CreateBlocker<T>(Enumerable.Any);
+            blockUntilAny(items, condition);
+        }
+
+        public static void BlockUntilAll<T>(this IEnumerable<T> items, Func<T, bool> condition)
+        {
+            var blockUntilAll = CreateBlocker<T>(Enumerable.All);
+            blockUntilAll(items, condition);
+        }
+
+        private static Action<IEnumerable<T>, Func<T, bool>> CreateBlocker<T>(
+            Func<IEnumerable<T>, Func<T, bool>, bool> conditionalTest)
+        {
+            return (items, condition) =>
             {
-                /* Block the thread */
-            }
+                var currentItems = items.ToArray();
+                while (!conditionalTest(currentItems, condition))
+                {
+                    /* Block the thread */
+                }
+            };
         }
 
         public static void ShouldHaveAtLeastOne<T>(this IEnumerable<T> items, Func<T, bool> condition)
