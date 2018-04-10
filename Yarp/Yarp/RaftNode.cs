@@ -303,13 +303,32 @@ namespace Yarp
             var requesterId = request.RequesterId;
             var appendEntries = request.RequestMessage;
 
+            /* When sending an AppendEntries RPC,
+             * the leader includes the term number and index of the entry
+             * that immediately precedes the new entry.
+             * If the follower cannot find a match for this entry in its own log,
+             * it rejects the request to append the new entry.
+             */
+            var termNumber = appendEntries.PreviousLogTerm;
+            var targetIndexToInsertItemAfter = appendEntries.PreviousLogIndex;
+            var currentNumberOfEntries = _logEntries.Count;
+
+            // Match term number and index
+            var hasIncorrectEntry = currentNumberOfEntries > 0 && _logEntries[targetIndexToInsertItemAfter].Item1 != termNumber;
+            if (targetIndexToInsertItemAfter > currentNumberOfEntries || 
+                hasIncorrectEntry)
+            {
+                context?.SendMessage(new Response<AppendEntries>(requesterId, _nodeId,
+                    new AppendEntriesResult(_term, false)));
+            }
+
             // Convert to a follower if the other term is higher
             if (_term < appendEntries.Term)
             {
                 Become(Follower);
                 _term = appendEntries.Term;
-            }            
-            
+            }
+
             _lastLogTerm = appendEntries.Term;
 
             // Update the log entries
@@ -322,7 +341,7 @@ namespace Yarp
             // Set the last log index
             var newIndexOffset = entries.Length;
             _lastLogIndex += newIndexOffset;
-                
+
             context?.SendMessage(new Response<AppendEntries>(requesterId, _nodeId,
                 new AppendEntriesResult(_term, true)));
         }

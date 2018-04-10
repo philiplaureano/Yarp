@@ -349,30 +349,24 @@ namespace Tests
 
             _raftNode = new RaftNode(nodeId, outbox.Add, eventLog.Add, () => otherActors, startingTerm);
             _raftNode.Tell(new Initialize());
+            Thread.Sleep(100);
 
+            var term = 42;
             var leaderId = Guid.NewGuid();
-            var appendEntries = new AppendEntries(42, leaderId, 1, 41, new object[0], 0);
+            var appendEntries = new AppendEntries(term, leaderId, 1, 41, new object[0], 0);
 
             var requesterId = Guid.NewGuid();
-            var request = new Request<AppendEntries>(requesterId, appendEntries);
-            _raftNode.Tell(request);
+            var response = _raftNode.Request(requesterId, () => appendEntries);
 
-            void TimeoutHandler()
-            {
-                Assert.True(false,
-                    "Message timeout occurred while waiting for an Response<AppendEntries> from the raft node");
-            }
+            Assert.Equal(requesterId, response.RequesterId);
+            Assert.Equal(nodeId, response.ResponderId);
 
-            outbox.BlockUntilAny(msg => msg is Response<AppendEntries>, TimeoutHandler, TimeSpan.FromSeconds(5));
-
-            var responses = outbox.CastAs<Response<AppendEntries>>().ToArray();
-            Assert.NotEmpty(responses);
-
-            var response = responses.First();
-            
             // Reply false if log doesn’t contain an entry at prevLogIndex whose term matches prevLogTerm (§5.3)
-            Assert.IsType<bool>(response.ResponseMessage);
-            Assert.False((bool)response.ResponseMessage);            
+            Assert.IsType<AppendEntriesResult>(response.ResponseMessage);
+
+            var result = (AppendEntriesResult) response.ResponseMessage;
+
+            Assert.False(result.Success);
         }
 
         private void RunTest(Func<object> createMessageToSend,
