@@ -17,24 +17,25 @@ namespace Tests
         [Fact]
         public void ShouldWinElectionIfMajorityOfVotesReceived()
         {
-            var numberOfOtherActors = 7;
+            var numberOfOtherActors = 9;
             var actorIds = Enumerable.Range(0, numberOfOtherActors)
                 .Select(_ => Guid.NewGuid()).ToArray();
 
             Func<IEnumerable<Guid>> getOtherActors = () => actorIds;
 
             var outbox = new ConcurrentBag<object>();
+            var eventLog = new ConcurrentBag<object>();
             var nodeId = Guid.NewGuid();
-            _raftNode = new RaftNode(nodeId, outbox.Add, getOtherActors);
+            _raftNode = new RaftNode(nodeId, outbox.Add, eventLog.Add, getOtherActors);
 
-            var numberOfSuccessfulVotes = 4;
-            var numberOfFailedVotes = 3;
+            var numberOfSuccessfulVotes = 5;
+            var numberOfFailedVotes = 4;
 
             IEnumerable<Response<RequestVote>> CreateVotes(int term, bool result, int numberOfVotes) =>
                 Enumerable.Range(0, numberOfVotes).Select(index => new Response<RequestVote>(nodeId,
                     actorIds[index], new RequestVoteResult(term, result, actorIds[index], nodeId)));
 
-            // Create an election where 4 out of 7 votes are in favor of the
+            // Create an election where 5 out of 9 votes are in favor of the
             // candidate node
             var newTerm = 1;
             var successfulVotes = CreateVotes(newTerm, true, numberOfSuccessfulVotes);
@@ -77,7 +78,9 @@ namespace Tests
             Task.WaitAll(tasks);
 
             // The node should post an election outcome message
-            var outcome = outbox.Where(msg => msg != null && msg is ElectionOutcome)
+            Assert.NotEmpty(eventLog);
+
+            var outcome = eventLog.Where(msg => msg != null && msg is ElectionOutcome)
                 .Cast<ElectionOutcome>()
                 .First();
 
@@ -122,8 +125,10 @@ namespace Tests
 
             var initialTerm = 0;
             var outbox = new ConcurrentBag<object>();
+            var eventLog = new ConcurrentBag<object>();
             var nodeId = Guid.NewGuid();
-            _raftNode = new RaftNode(nodeId, outbox.Add, getOtherActors, initialTerm, electionTimeoutInMilliseconds);
+            _raftNode = new RaftNode(nodeId, outbox.Add, eventLog.Add, getOtherActors, initialTerm,
+                electionTimeoutInMilliseconds);
 
             // Start the node and let it timeout to trigger an election
             _raftNode.Tell(new Initialize());
@@ -167,6 +172,65 @@ namespace Tests
         public void ShouldBecomeLeaderAfterWinningAnElection()
         {
             throw new NotImplementedException("TODO: Implement ShouldBecomeLeaderAfterWinningAnElection");
+        }
+
+        [Fact]
+        public void ShouldBecomeFollowerIfAppendEntriesReceivedFromNewLeader()
+        {
+            var electionTimeoutInMilliseconds = 1000;
+
+            var initialTerm = 0;
+            var outbox = new ConcurrentBag<object>();
+            var eventLog = new ConcurrentBag<object>();
+            var nodeId = Guid.NewGuid();
+
+            var numberOfOtherActors = 2;
+
+            IEnumerable<Guid> getOtherActors()
+            {
+                return Enumerable.Range(0, numberOfOtherActors).Select(_ => Guid.NewGuid());
+            }
+
+            _raftNode = new RaftNode(nodeId, outbox.Add, eventLog.Add, getOtherActors, initialTerm,
+                electionTimeoutInMilliseconds);
+
+            void BlockUntilTrue(Func<bool> condition)
+            {
+                while (!condition())
+                {
+                }
+            }
+
+            // Start the node and let it timeout to trigger an election
+            _raftNode.Tell(new Initialize());
+            eventLog.BlockUntilAny(msg => msg is RoleStateChanged rsc && rsc.Term == initialTerm);
+
+            // Look for the change in state to a candidate node
+            Assert.True(eventLog.Count(msg => msg is RoleStateChanged rsc &&
+                                              rsc.NewState == RoleState.Candidate &&
+                                              rsc.Term == initialTerm) == 1);
+
+            // Send a single heartbeat with a higher term so that the node reverts to 
+            // a follower state
+            var leaderId = Guid.NewGuid();
+            var requesterId = Guid.NewGuid();
+            _raftNode.Tell(new Request<AppendEntries>(requesterId,
+                new AppendEntries(42, leaderId, 0, 0, new object[0], 0)));
+
+            // Wait for a response
+            outbox.BlockUntilAny(msg =>
+                msg is Response<AppendEntries> response && response.ResponseMessage is AppendEntriesResult ae &&
+                ae.Term == 42);
+
+            var result = outbox.CastAs<Response<AppendEntries>>().First();
+            Assert.IsType<AppendEntriesResult>(result.ResponseMessage);
+
+            var responseMessage = (AppendEntriesResult) result.ResponseMessage;
+            Assert.True(responseMessage.Success);
+
+            // There should also be a state change that shows
+            // that the candidate node reverted back to a follower state
+            eventLog.ShouldHaveAtLeastOne(msg=>msg is RoleStateChanged rsc && rsc.NewState== RoleState.Follower && rsc.Term > 42);
         }
     }
 }
