@@ -83,7 +83,7 @@ namespace Tests
 
             Assert.Equal(nodeId, outcome.WinningActorId);
             Assert.Equal(newTerm, outcome.Term);
-            Assert.Subset(actorIds.ToHashSet(), outcome.KnownActors.ToHashSet());
+            Assert.Subset(new HashSet<Guid>(actorIds), new HashSet<Guid>(outcome.KnownActors));
 
             // Verify the votes
             var quorumCount = actorIds.Length * .51;

@@ -31,7 +31,6 @@ namespace Tests
             _timerActor = null;
             _timerId = Guid.Empty;
 
-            _elapsedEvents?.Clear();
             _elapsedEvents = null;
 
             _cancellationTokenSource = null;
